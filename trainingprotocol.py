@@ -34,7 +34,7 @@ class TrainingProtocol(AbstractProtocol):
 
         self.pipeline = rank // pipeline_size
         self.pipeline_rank = rank % pipeline_size
-        self.Next = None
+        
         if self.pipeline_rank == 0:
             assert dataloader != None
             self.dataloader = enumerate(dataloader)
@@ -110,7 +110,7 @@ class TrainingProtocol(AbstractProtocol):
         peer: Peer = self._lower_get_peer(nodeid)
         if nodeid == self.prev:
             if self.pipeline_rank == 0:
-                loss = F.nll_loss(data, self.buffer_in.get(seq_id))
+                loss = F.cross_entropy(data, self.buffer_in.get(seq_id))
                 loss.backward()
                 if self.iter % 100 == 0:
                     print(loss.item())
