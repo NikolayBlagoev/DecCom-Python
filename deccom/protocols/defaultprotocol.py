@@ -76,7 +76,7 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         return
     def get_lowest(self):
         return self
-    def connection_lost(self, exc: Exception | None) -> None:
+    def connection_lost(self, exc: Exception) -> None:
         print("lost connection",exc)
         return super().connection_lost(exc)
     

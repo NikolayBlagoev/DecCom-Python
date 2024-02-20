@@ -93,7 +93,9 @@ class StreamProtocol(AbstractProtocol):
     async def send_ping(self, addr, success, fail, timeout):
         await self._lower_ping(addr, success, fail, timeout)
     async def open_connection(self, remote_ip, remote_port, node_id: bytes, duplicate = False):
-        # print("connection to",node_id)
+        print("connection to",remote_port, node_id)
+        if remote_port == None:
+        	return None
         if self.connections.get(node_id) != None:
             # print("duplicate connection OPENED")
             

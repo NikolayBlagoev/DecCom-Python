@@ -4,7 +4,7 @@ from deccom.cryptofuncs.signatures import *
 from ecdsa import SigningKey
 class Peer(object):
     me = None
-    def __init__(self, addr, pub_key: str | SigningKey  = "", tcp = None, id_node = None) -> None:
+    def __init__(self, addr, pub_key: SigningKey  = "", tcp = None, id_node = None) -> None:
        
         self.priv_key = None
         if pub_key == None:

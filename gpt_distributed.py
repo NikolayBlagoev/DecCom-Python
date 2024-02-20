@@ -82,7 +82,7 @@ class GPTStageFirst(GPTStageBase):
         for _ in range(self._num_layers):
             module_list.append(self._create_transformer_layer())
         self.model = nn.Sequential(*module_list).to(device)
-
+        self.task_layer = self._create_last_layer().to(device)
     def forward(self, x):
         out = self.model(x.to(self.device))
         return out.cpu() if self._to_cpu else out
@@ -111,7 +111,7 @@ class GPTStageLast(GPTStageBase):
             module_list.append(self._create_transformer_layer())
         # module_list.append(self._create_last_layer())
         self.model = nn.Sequential(*module_list).to(device)
-        self.task_layer = self._create_last_layer().to(device)
+        
         # print(self.parameters())
 
     def forward(self, x, target=None):
@@ -120,9 +120,9 @@ class GPTStageLast(GPTStageBase):
             out = self.task_layer(x)
             return out.cpu() if self._to_cpu else out
         elif self.task == 'Seq2SeqClassification':
-            assert target is not None
+            
             x = self.model(x)
-            return self.task_layer(x, target)
+            return x
 
 
 

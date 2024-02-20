@@ -1,6 +1,4 @@
 from gpt_distributed import GPTStageFirst, GPTStageLast, GPTStageMiddle
-import torch
-import torchvision
 from sys import argv
 import asyncio
 from deccom.cryptofuncs.hash import SHA256
@@ -21,8 +19,7 @@ momentum = 0.5
 log_interval = 10
 
 random_seed = 1
-torch.backends.cudnn.enabled = False
-torch.manual_seed(random_seed)
+
 
 
 # train_loader = torch.utils.data.DataLoader(
@@ -103,16 +100,21 @@ if argv[1] == "0" or argv[1] == "3":
 elif argv[1] == "1" or argv[1] == "4":
     gossip.peers[n.id_node] = n
     tokenizer, leng = build_tokenizer()
-    net = GPTStageLast(1024, tokenizer.vocab_size, 2, "cpu")
+    net = GPTStageMiddle(1024, -1, 2, "cpu")
+    
 elif argv[1] == "2" or argv[1] == "5":
     gossip.peers[n.id_node] = n
-    net = GPTStageMiddle(1024, -1, 2, "cpu")
+    tokenizer, leng = build_tokenizer()
+    net = GPTStageLast(1024, tokenizer.vocab_size, 2, "cpu")
+
 optimizer = optim.SGD(net.parameters(), lr=learning_rate,
                       momentum=momentum)
 training = TrainingProtocol(6,3,int(argv[1]),net,optimizer,train_loader)
 training.set_lower(stream)
 me = TrainingNode(training,"127.0.0.1", 10015 if argv[1] == "0" else None)
+print( "TCP", me.tcp_port)
 Peer.me = Peer((me.ip_addr,me.port), tcp=me.tcp_port, pub_key=argv[1])
+print(Peer.me.id_node)
 loop = asyncio.new_event_loop()
 print("run...")
 

@@ -26,7 +26,7 @@ class GossipProtocol(AbstractProtocol):
                     })
     required_lower = AbstractProtocol.required_lower + ["send_ping"]
 
-    def __init__(self, bootstrap_peers: list[Peer], interval: int = 10, submodule: DefaultProtocol | AbstractProtocol = None,
+    def __init__(self, bootstrap_peers: list[Peer], interval: int = 10, submodule: AbstractProtocol = None,
                  callback: Callable[[tuple[str, int], bytes], None] = lambda addr, data: ..., disconnect_callback=lambda addr, nodeid: ...,
                  peer_connected_callback=lambda nodeid: ...):
         super().__init__(submodule, callback)
@@ -65,7 +65,7 @@ class GossipProtocol(AbstractProtocol):
         self.disconnect_callback(addr, node_id)
 
     async def _push_or_pull(self):
-        # print("push or pull")
+        print("push or pull")
         rand = randint(0, 1)
         # print(rand)
         ids = list(self.peers.keys())
@@ -113,7 +113,7 @@ class GossipProtocol(AbstractProtocol):
         if data[0] == GossipProtocol.INTRODUCTION:
 
             other, i = Peer.from_bytes(data[1:])
-            # print("introduction form", other.pub_key)
+            print("introduction form", other.pub_key)
             other.addr = addr
             if self.peer_crawls.get(other.id_node) != None:
                 self.peer_crawls[other.id_node].set_result("success")
