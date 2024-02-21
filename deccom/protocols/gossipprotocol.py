@@ -7,11 +7,12 @@ from random import randint, sample
 
 
 class GossipProtocol(AbstractProtocol):
-    INTRODUCTION = int.from_bytes(b'\xe1', byteorder="big")
+    INTRODUCTION = int.from_bytes(b'\xe1', byteorder="big") # english opening king's variation
     PUSH = int.from_bytes(b'\xc4', byteorder="big")
     PULL = int.from_bytes(b'\xe5', byteorder="big")
     PULLED = int.from_bytes(b'\xc3', byteorder="big")
     FIND = int.from_bytes(b'\xf6', byteorder="big")
+    ASK_FOR_ID = int.from_bytes(b'\xf3',byteorder="big")
     offers = dict(AbstractProtocol.offers, **{
         "find_peer": "find_peer",
         "disconnect_callback": "set_disconnect_callback",
@@ -33,8 +34,9 @@ class GossipProtocol(AbstractProtocol):
 
         self.peers: dict[bytes, Peer] = dict()
         self.interval = interval
-        for peer in bootstrap_peers:
-            self.peers[peer.id_node] = peer
+        # for peer in bootstrap_peers:
+        #     self.peers[peer.id_node] = peer
+        self.bootstrap_peers = bootstrap_peers
         self.disconnect_callback = disconnect_callback
         self.peer_crawls = dict()
         self.sent_finds = dict()
@@ -43,8 +45,10 @@ class GossipProtocol(AbstractProtocol):
 
     async def start(self):
         await super().start()
-        for k, p in self.peers.items():
+        for p in self.bootstrap_peers:
             await self.introduce_to_peer(p)
+            msg = bytearray([GossipProtocol.ASK_FOR_ID])
+            await self._lower_sendto(msg,p.addr)
         self.push_or_pull()
 
     def add_peer(self, p: Peer):
@@ -61,11 +65,12 @@ class GossipProtocol(AbstractProtocol):
         loop.create_task(self._push_or_pull())
 
     def remove_peer(self, addr, node_id):
+        print("lost ",addr,node_id)
         del self.peers[node_id]
         self.disconnect_callback(addr, node_id)
 
     async def _push_or_pull(self):
-        print("push or pull")
+        # print("push or pull")
         rand = randint(0, 1)
         # print(rand)
         ids = list(self.peers.keys())
@@ -105,7 +110,7 @@ class GossipProtocol(AbstractProtocol):
         await self._lower_sendto(msg, peer.addr)
 
     async def sendto(self, msg, addr):
-        tmp = bytearray([b'\x01'])
+        tmp = bytearray([1])
         tmp = tmp + msg
         return await self._lower_sendto(tmp, addr)
 
@@ -113,7 +118,7 @@ class GossipProtocol(AbstractProtocol):
         if data[0] == GossipProtocol.INTRODUCTION:
 
             other, i = Peer.from_bytes(data[1:])
-            print("introduction form", other.pub_key)
+            # print("introduction form", other.pub_key)
             other.addr = addr
             if self.peer_crawls.get(other.id_node) != None:
                 self.peer_crawls[other.id_node].set_result("success")
@@ -127,9 +132,10 @@ class GossipProtocol(AbstractProtocol):
                 self.peer_connected(other.id_node)
 
         elif data[0] == GossipProtocol.PULL:
-            # print("request to pull")
+            
             flag = False
             other, i = Peer.from_bytes(data[1:])
+            # print("request to pull from", other.pub_key)
             if self.peer_crawls.get(other.id_node) != None:
                 self.peer_crawls[other.id_node].set_result("success")
                 del self.peer_crawls[other.id_node]
@@ -154,6 +160,7 @@ class GossipProtocol(AbstractProtocol):
         elif data[0] == GossipProtocol.PULLED:
             # print("pulled")
             other, i = Peer.from_bytes(data[1:])
+            # print("pulled a", other.pub_key)
             if self.peer_crawls.get(other.id_node) != None:
                 self.peer_crawls[other.id_node].set_result("success")
                 del self.peer_crawls[other.id_node]
@@ -199,7 +206,12 @@ class GossipProtocol(AbstractProtocol):
                 peer = self.peers.get(id)
                 loop = asyncio.get_running_loop()
                 loop.create_task(self._lower_sendto(data, peer.addr))
-
+        elif data[0] == GossipProtocol.ASK_FOR_ID:
+            msg = bytearray([GossipProtocol.INTRODUCTION])
+            msg = msg + bytes(Peer.get_current())
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._lower_sendto(msg, addr))
+            
         else:
             self.callback(addr, data[1:])
         return
@@ -213,7 +225,9 @@ class GossipProtocol(AbstractProtocol):
 
     def get_peers(self) -> dict[bytes, Peer]:
         return self.peers
-
+    def peer_connected(self,nodeid):
+        # print("peer conencted??", self)
+        self.peer_connected_callback(nodeid)
     async def _find_peer(self, fut, id):
         self.peer_crawls[id] = fut
         msg = bytearray([GossipProtocol.FIND])

@@ -27,7 +27,8 @@ class StreamProtocol(AbstractProtocol):
                 "open_connection": "open_connection",
                 "send_stream": "send_stream",
                 "process_data": "process_data",
-                "send_ping": "send_ping"
+                "send_ping": "send_ping",
+                "set_peer_connected_callback": "set_connected_callback"
                 })
     bindings = dict(AbstractProtocol.bindings, **{
                     "remove_peer":"set_disconnect_callback",
@@ -52,7 +53,7 @@ class StreamProtocol(AbstractProtocol):
         
     
     async def handle_connection(self, reader: asyncio.StreamReader,writer: asyncio.StreamWriter, node_id: Any = None, addr: Any = None):
-        # print("CONNECTION FROM PEER")
+        print("CONNECTION FROM PEER")
         try:
             data = await  asyncio.wait_for(reader.readline(), timeout=10)
             
@@ -65,7 +66,7 @@ class StreamProtocol(AbstractProtocol):
             writer.close()
             return
         node_id = data[4:-1]
-        print("connection from",node_id)
+        # print("connection from",node_id)
         if self.connections.get(node_id) != None:
             print("duplicate connection RECEIVED")
             print(self.connections.get(node_id).opened_by_me,ternary_comparison(Peer.me.id_node, node_id))
@@ -81,19 +82,22 @@ class StreamProtocol(AbstractProtocol):
         return
     
     def peer_connected(self,nodeid):
-        print("here", nodeid)
+        # print("here", nodeid)
         peer = self.get_peer(nodeid)
         # print(peer.tcp)
         if self.always_connect and peer != None and peer.tcp != None:
             if self.connections.get(peer.id_node) == None:
                 
                 asyncio.ensure_future(self.open_connection(peer.addr[0], peer.tcp, peer.id_node))
-        # self.peer_connected_callback(nodeid)
+        self.peer_connected_callback(nodeid)
         return
     async def send_ping(self, addr, success, fail, timeout):
         await self._lower_ping(addr, success, fail, timeout)
     async def open_connection(self, remote_ip, remote_port, node_id: bytes, duplicate = False):
-        print("connection to",remote_port, node_id)
+        # print("connection to",remote_port, node_id)
+        if node_id==Peer.get_current():
+            print("OPENING TO SELF???")
+            return
         if remote_port == None:
         	return None
         if self.connections.get(node_id) != None:
@@ -126,7 +130,7 @@ class StreamProtocol(AbstractProtocol):
         if data == b'':
             if node_id!=None:
                 self.connections[node_id].fut = None
-            print("closing")
+            print("closing", addr,node_id)
             self.remove_from_dict(node_id)
             self.closed_stream(node_id, addr)
             return
@@ -143,7 +147,7 @@ class StreamProtocol(AbstractProtocol):
         if self.connections.get(node_id) == None: 
             print("CANT FIND???")
             return
-        # print("writing",len(data))
+        print("writing",len(data))
         self.connections[node_id].writer.write(len(data).to_bytes(32,byteorder="big"))
         await self.connections[node_id].writer.drain()
         self.connections[node_id].writer.write(data)
@@ -155,6 +159,8 @@ class StreamProtocol(AbstractProtocol):
         # print("RECEIVED FROM",node_id)
         self.stream_callback(data,node_id,addr)
     def remove_from_dict(self,nodeid):
+        if self.connections.get(nodeid) == None:
+            return
         # print("removing...")
         if self.connections[nodeid].fut != None:
             # print("cancelling task...")

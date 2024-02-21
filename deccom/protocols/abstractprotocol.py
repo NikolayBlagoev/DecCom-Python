@@ -53,8 +53,9 @@ class AbstractProtocol(object):
                     if submodule.offers.get(attr) != None:
                         if submodule._taken.get(submodule.offers.get(attr)) != None:
                             raise Exception(attr,"already taken by",submodule._taken.get(attr))
-                        getattr(submodule,attr)(val)
-                        submodule._taken[attr] = val
+                        print("found",attr,"at",submodule, submodule.offers.get(attr))
+                        getattr(submodule,submodule.offers.get(attr))(val)
+                        submodule._taken[submodule.offers.get(attr)] = val
                         return
             if not hasattr(submodule,"submodule") or submodule.submodule == None:
                 raise Exception("Cannot find any method to bind to",attr)
@@ -63,6 +64,7 @@ class AbstractProtocol(object):
         else:
             if submodule._taken.get(attr) != None:
                 raise Exception(attr,"already taken by",submodule._taken.get(attr))
+            print("found",attr,"at",submodule)
             getattr(submodule,attr)(val)
             submodule._taken[attr] = val
             return
@@ -74,6 +76,7 @@ class AbstractProtocol(object):
         self._taken = dict()
         self._lower_sendto = lambda msg,addr: ...
         self._lower_start = lambda: ...
+        
     def process_datagram(self,addr:tuple[str,int],data:bytes):
         self.callback(addr,data)
         return
@@ -83,9 +86,7 @@ class AbstractProtocol(object):
         await self._lower_start()
         print("started")
         self.started = True
-    def peer_connected(self,nodeid):
-        # print("peer conencted??", nodeid,self)
-        self.peer_connected_callback(nodeid)
+    
     def inform_lower(self):
         print("lower setting")
         for k,v in self.__class__.bindings.items():
@@ -108,10 +109,7 @@ class AbstractProtocol(object):
     def set_lower(self, submodule):
         self.submodule = submodule
         for method in self.__class__.required_lower:
-            if not self.__class__.check_if_have(submodule,method):
-                
-                
-                
+            if not self.__class__.check_if_have(submodule,method): 
                 raise Exception("MISSING REQUIRED!",method," in the protocol chain by ",type(self))
         
         self.inform_lower()

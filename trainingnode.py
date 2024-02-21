@@ -13,7 +13,7 @@ class TrainingNode(Node):
             tcp_port = find_open_port()
         self.protocol_type = protocol
         self.tcp_port = tcp_port
-        print("tcp_port", tcp_port)
+        ("tcp_port", tcp_port)
         self.peer_reads = dict()
         self.peer_writes = dict()
         self.protocol_type.callback = lambda **kwargs: 0
