@@ -53,7 +53,7 @@ class AbstractProtocol(object):
                     if submodule.offers.get(attr) != None:
                         if submodule._taken.get(submodule.offers.get(attr)) != None:
                             raise Exception(attr,"already taken by",submodule._taken.get(attr))
-                        print("found",attr,"at",submodule, submodule.offers.get(attr))
+                        # print("found",attr,"at",submodule, submodule.offers.get(attr))
                         getattr(submodule,submodule.offers.get(attr))(val)
                         submodule._taken[submodule.offers.get(attr)] = val
                         return
@@ -64,7 +64,7 @@ class AbstractProtocol(object):
         else:
             if submodule._taken.get(attr) != None:
                 raise Exception(attr,"already taken by",submodule._taken.get(attr))
-            print("found",attr,"at",submodule)
+            # print("found",attr,"at",submodule)
             getattr(submodule,attr)(val)
             submodule._taken[attr] = val
             return
@@ -88,7 +88,7 @@ class AbstractProtocol(object):
         self.started = True
     
     def inform_lower(self):
-        print("lower setting")
+        # print("lower setting")
         for k,v in self.__class__.bindings.items():
             method = self.__class__.get_if_have(self.submodule,v)
             if method == None:

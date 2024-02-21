@@ -16,11 +16,12 @@ class TrainingNode(Node):
         ("tcp_port", tcp_port)
         self.peer_reads = dict()
         self.peer_writes = dict()
-        self.protocol_type.callback = lambda **kwargs: 0
+        # self.protocol_type.callback = lambda **kwargs: 0
     async def listen(self):
         loop = asyncio.get_running_loop()
         listen = loop.create_datagram_endpoint(self.protocol_type.get_lowest, local_addr=(self.ip_addr, self.port))
         self.transport, self.protocol = await listen
+        print(self.protocol_type.get_lowest_stream().handle_connection)
         self.server = await asyncio.start_server(
                 self.protocol_type.get_lowest_stream().handle_connection, self.ip_addr, self.tcp_port)
         

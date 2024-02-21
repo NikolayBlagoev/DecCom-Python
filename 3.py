@@ -7,9 +7,9 @@ from deccom.protocols.streamprotocol import StreamProtocol
 from random import randint
 
 
-n = Peer(("127.0.0.1", 10015), pub_key="1")
-def send(nd: StreamNode):
-    asyncio.ensure_future(nd.find_node("3"))
+n = Peer(("127.0.0.1", 10015))
+# def send(nd: StreamNode):
+#     asyncio.ensure_future(nd.find_node("3"))
 protocol = DefaultProtocol()
 gossip = GossipProtocol([n])
 gossip.set_lower(protocol)

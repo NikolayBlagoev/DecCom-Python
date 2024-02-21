@@ -19,6 +19,7 @@ class StreamNode(Node):
         loop = asyncio.get_running_loop()
         listen = loop.create_datagram_endpoint(self.protocol_type.get_lowest, local_addr=(self.ip_addr, self.port))
         self.transport, self.protocol = await listen
+        print(self.protocol_type.get_lowest_stream().handle_connection)
         self.server = await asyncio.start_server(
                 self.protocol_type.get_lowest_stream().handle_connection, self.ip_addr, self.tcp_port)
         

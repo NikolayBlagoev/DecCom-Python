@@ -135,7 +135,12 @@ class SwarmProtocol(AbstractProtocol):
             await self._lower_sendto(msg, p.addr)
         if self.rank == 0: 
             try:
-                    batch_idx, (data, target) = next(self.dataloader)
+                    if self.iter > 10:
+                        print("finished training")
+                        return
+                    batch_idx, ret = next(self.dataloader)
+                    data = ret['text']
+                    target = ret['text']
             except StopIteration :
                     print("TRAINING COMPLETE")
                     return
@@ -203,7 +208,12 @@ class SwarmProtocol(AbstractProtocol):
                     #     print("TRAINING COMPLETE")
                     #     return
                     try:
-                        batch_idx, (data, target) = next(self.dataloader)
+                        if self.iter > 10:
+                            print("finished training")
+                            return
+                        batch_idx, ret = next(self.dataloader)
+                        data = ret['text']
+                        target = ret['text']
                     except StopIteration :
                         print("TRAINING COMPLETE")
                         return
@@ -228,7 +238,12 @@ class SwarmProtocol(AbstractProtocol):
                 self._apply_grad()
                 if self.rank == 0:
                     try:
-                        batch_idx, (data, target) = next(self.dataloader)
+                        if self.iter > 10:
+                            print("finished training")
+                            return
+                        batch_idx, ret = next(self.dataloader)
+                        data = ret['text']
+                        target = ret['text']
                     except StopIteration :
                         print("TRAINING COMPLETE")
                         return
@@ -249,7 +264,7 @@ class SwarmProtocol(AbstractProtocol):
                 print("FORWARDS")
             try:
                 if self.rank == 0:
-                    loss = F.cross_entropy(data, self.buffer_in.get(seq_id)[0])
+                    loss = self.net.task_layer(data,self.buffer_in.get(seq_id)[0])
                     loss.backward()
                     if self.iter % 10 == 0:
                         print(loss.item())

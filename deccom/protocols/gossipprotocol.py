@@ -79,7 +79,7 @@ class GossipProtocol(AbstractProtocol):
             for i in range(strt, strt+5):
                 if i >= len(ids):
                     break
-                await self._lower_ping(self.peers[ids[i]].addr, print, lambda addr, node_id=ids[i], self=self: self.remove_peer(addr, node_id), 10)
+                await self._lower_ping(self.peers[ids[i]].addr, print, lambda addr, node_id=ids[i], self=self: self.remove_peer(addr, node_id), self.interval)
 
         if rand == 0 and len(ids) >= 2:
 
@@ -102,7 +102,7 @@ class GossipProtocol(AbstractProtocol):
             msg = msg + bytes(Peer.me)
             await self._lower_sendto(msg, self.peers[p1].addr)
         loop = asyncio.get_running_loop()
-        self.refresh_loop = loop.call_later(self.interval, self.push_or_pull)
+        self.refresh_loop = loop.call_later(self.interval+2, self.push_or_pull)
 
     async def introduce_to_peer(self, peer: Peer):
         msg = bytearray([GossipProtocol.INTRODUCTION])

@@ -9,8 +9,8 @@ from deccom.peers import Peer
 from deccom.protocols.streamprotocol import StreamProtocol
 from trainingnode import TrainingNode
 from swarmprotocol import SwarmProtocol
-# from task_datasets.qqp import get_glue_qqp_train_data_loader
-# from task_datasets.tokenizer import build_tokenizer
+from task_datasets.qqp import get_glue_qqp_train_data_loader
+from task_datasets.tokenizer import build_tokenizer
 import torchvision
 import torch
 n_epochs = 3
@@ -24,23 +24,23 @@ random_seed = 1
 
 
 
-train_loader = torch.utils.data.DataLoader(
-  torchvision.datasets.MNIST('files/', train=True, download=True,
-                             transform=torchvision.transforms.Compose([
-                               torchvision.transforms.ToTensor(),
-                               torchvision.transforms.Normalize(
-                                 (0.1307,), (0.3081,))
-                             ])),
-  batch_size=batch_size_train, shuffle=True)
+# train_loader = torch.utils.data.DataLoader(
+#   torchvision.datasets.MNIST('files/', train=True, download=True,
+#                              transform=torchvision.transforms.Compose([
+#                                torchvision.transforms.ToTensor(),
+#                                torchvision.transforms.Normalize(
+#                                  (0.1307,), (0.3081,))
+#                              ])),
+#   batch_size=batch_size_train, shuffle=True)
 
-test_loader = torch.utils.data.DataLoader(
-  torchvision.datasets.MNIST('files/', train=False, download=True,
-                             transform=torchvision.transforms.Compose([
-                               torchvision.transforms.ToTensor(),
-                               torchvision.transforms.Normalize(
-                                 (0.1307,), (0.3081,))
-                             ])),
-  batch_size=batch_size_test, shuffle=True)
+# test_loader = torch.utils.data.DataLoader(
+#   torchvision.datasets.MNIST('files/', train=False, download=True,
+#                              transform=torchvision.transforms.Compose([
+#                                torchvision.transforms.ToTensor(),
+#                                torchvision.transforms.Normalize(
+#                                  (0.1307,), (0.3081,))
+#                              ])),
+#   batch_size=batch_size_test, shuffle=True)
 
 
 import torch.nn as nn
@@ -92,19 +92,24 @@ gossip.set_lower(protocol)
 stream = StreamProtocol(False)
 stream.set_lower(gossip)
 net = None
+train_loader = None
 n = Peer(("127.0.0.1", 10015))
 if argv[1] != "0":
     gossip.bootstrap_peers.append(n)
 if argv[1] == "0" or argv[1] == "3":
-   
-    net = Pipe0()
+    
+    tokenizer, leng = build_tokenizer()
+    train_loader = get_glue_qqp_train_data_loader(tokenizer)
+    net = GPTStageFirst(1024,tokenizer.vocab_size, 2, "cpu")
 elif argv[1] == "1" or argv[1] == "4":
     
-    net = Pipe1()
+    tokenizer, leng = build_tokenizer()
+    net = GPTStageMiddle(1024, -1, 2, "cpu")
     
 elif argv[1] == "2" or argv[1] == "5":
     
-    net = Pipe2()
+    tokenizer, leng = build_tokenizer()
+    net = GPTStageLast(1024, tokenizer.vocab_size, 2, "cpu")
 
 optimizer = optim.SGD(net.parameters(), lr=learning_rate,
                       momentum=momentum)
