@@ -83,7 +83,7 @@ class QQPDataset(GLUEAbstractDataset):
 
 
 def get_glue_qqp_train_data_loader(tokenizer, num_workers=0):
-    train_dataset = QQPDataset('training',"./task_datasets/data/QQP/train.tsv", tokenizer, 1024)
+    train_dataset = QQPDataset('training',["./task_datasets/data/QQP/train.tsv"], tokenizer, 1024)
     train_sampler = torch.utils.data.RandomSampler(train_dataset)
     train_data_loader = torch.utils.data.DataLoader(train_dataset,
                                                     batch_size=4,

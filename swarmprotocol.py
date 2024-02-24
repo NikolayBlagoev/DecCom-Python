@@ -28,11 +28,12 @@ class SwarmProtocol(AbstractProtocol):
         "_lower_send_stream": "send_stream",
         "_lower_get_peer": "get_peer",
         "peer_connected": "set_connected_callback",
-        "_lower_get_peers": "get_peers"
+        "_lower_get_peers": "get_peers",
+        "peer_disconnected": "set_disconnect_callback"
     })
     required_lower = AbstractProtocol.required_lower + \
         ["find_peer", "set_stream_callback",
-            "open_connection", "send_stream", "get_peer", "get_peers", "set_connected_callback"]
+            "open_connection", "send_stream", "get_peer", "get_peers", "set_connected_callback","set_disconnect_callback"]
     INTRODUCTION = int.from_bytes(b'\xd1', byteorder="big")
     COMPLETE = int.from_bytes(b'\xd8', byteorder="big")
     
@@ -48,9 +49,12 @@ class SwarmProtocol(AbstractProtocol):
         self._lower_send_stream = lambda: ...
         self._lower_get_peer = lambda: ...
         self._lower_get_peers = lambda: ...
+        
         self.net: nn.Module = net
         self.sizes = []
-        
+        if self.rank == 0:
+            assert dataloader != None
+            self.dataloader = enumerate(dataloader)
         self.len_sizes = []
         for param in self.net.parameters():
             self.sizes.append(param.shape)
@@ -65,6 +69,7 @@ class SwarmProtocol(AbstractProtocol):
         self.sent: dict[bytes, dict[bytes,datetime]] = dict()
         self.same_stage = []
         self.outstanding: dict[bytes,asyncio.TimerHandle] = dict()
+        self.forward_start = None
     def peer_connected(self, nodeid):
         # print("NEW PEER")
         loop = asyncio.get_running_loop()
@@ -77,7 +82,7 @@ class SwarmProtocol(AbstractProtocol):
     def choose_next(self,):
         choice = PeerClassification(None, 10000000000)
         if len(self.next_stage.items()) == 0:
-            # print("ooops... NO NEXT???")
+            print("ooops... NO NEXT???")
             return None
         for idx,pr in self.next_stage.items():
             if pr.delay < choice.delay:
@@ -85,11 +90,15 @@ class SwarmProtocol(AbstractProtocol):
         # print(choice.delay,len(self.next_stage.items()),choice.peerid)
         return choice
     async def send_forward(self,seq_id, inp, outp, prev_peer = None):
-        choice = self.choose_next()
-        while choice == None:
-            # print("eeeping....")
-            await asyncio.sleep(3)
+        if self.rank % 3 == 2:
+            print("looking for", seq_id[0])
+            choice = PeerClassification(SHA256(str(seq_id[0])),0)
+        else:
             choice = self.choose_next()
+            while choice == None:
+                # print("eeeping....")
+                await asyncio.sleep(3)
+                choice = self.choose_next()
         self.buffer_in[seq_id] = (inp, prev_peer)
         self.buffer_out[seq_id] = (outp,choice.peerid)
         if self.sent.get(choice.peerid) == None:
@@ -120,7 +129,8 @@ class SwarmProtocol(AbstractProtocol):
             if peer == Peer.me.id_node:
                 continue
             loop.create_task(self.send_stream(peer,pickle.dumps(self.prev_grad),seqdata=seq_id)) 
-        if len(self.aggregation) >= len(self.same_stage):
+        if len(self.aggregation) > len(self.same_stage):
+                    print("CAN DO BACK", len(self.aggregation), len(self.same_stage))
                     self._apply_grad()  
         del self.buffer_in[seq_id]
         del self.buffer_out[seq_id]     
@@ -134,8 +144,9 @@ class SwarmProtocol(AbstractProtocol):
             msg = msg  + int(self.rank).to_bytes(4,byteorder="big") + Peer.me.id_node
             await self._lower_sendto(msg, p.addr)
         if self.rank == 0: 
+            self.forward_start = datetime.now()
             try:
-                    if self.iter > 10:
+                    if self.iter > 25:
                         print("finished training")
                         return
                     batch_idx, ret = next(self.dataloader)
@@ -145,13 +156,22 @@ class SwarmProtocol(AbstractProtocol):
                     print("TRAINING COMPLETE")
                     return
             
-            new_seq_id = os.urandom(8)
+            new_seq_id = bytearray()
+            new_seq_id = int(Peer.me.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
+            new_seq_id = bytes(new_seq_id)
             while self.buffer_out.get(new_seq_id) != None:
-                    new_seq_id = os.urandom(8)
+                    new_seq_id = bytearray()
+                    new_seq_id = int(Peer.me.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
+                    new_seq_id = bytes(new_seq_id)
             ret = SwarmProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
             ret.retain_grad()
             await self.send_forward(new_seq_id,target, ret)
-        
+    def peer_disconnected(self,addr, node_id):
+        if node_id in self.same_stage:
+            self.same_stage.remove(node_id)
+            self.check_for_back()
+        if self.next_stage.get(node_id) != None:
+            del self.next_stage[node_id]
     def _apply_grad(self):
         # print("applyinb back")
         self.iter += 1
@@ -169,11 +189,43 @@ class SwarmProtocol(AbstractProtocol):
         print("oops timed out",seq_id)
         nodeid = self.buffer_out[seq_id][1]
         # del self.next_stage[nodeid]
-        self.next_stage[nodeid].delay = 8000000
+        if self.next_stage.get(nodeid) != None:
+            self.next_stage[nodeid].delay = 8000000
         loop = asyncio.get_running_loop()
         loop.create_task(
             self.send_forward(seq_id,self.buffer_in[seq_id][0], self.buffer_out[seq_id][0], self.buffer_in[seq_id][1]))
         return
+    def check_for_back(self):
+        if len(self.aggregation) > len(self.same_stage):
+                print("CAN DO BACK", len(self.aggregation), len(self.same_stage))
+                self._apply_grad()
+                if self.rank == 0:
+                    if self.forward_start!= None:
+                        print("TIME IT TOOK", (datetime.now() - self.forward_start).seconds)
+                    self.forward_start = datetime.now()
+                    try:
+                        if self.iter > 25:
+                            print("finished training")
+                            return
+                        batch_idx, ret = next(self.dataloader)
+                        data = ret['text']
+                        target = ret['text']
+                    except StopIteration :
+                        print("TRAINING COMPLETE")
+                        return
+                    new_seq_id = bytearray()
+                    new_seq_id = int(Peer.me.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
+                    new_seq_id = bytes(new_seq_id)
+                    while self.buffer_out.get(new_seq_id) != None:
+                        new_seq_id = bytearray()
+                        new_seq_id = int(Peer.me.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
+                        new_seq_id = bytes(new_seq_id)
+                    
+                    ret = SwarmProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
+                    ret.retain_grad()
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(
+                            self.send_forward(new_seq_id,target, ret))
     def process_data(self, data:bytes, nodeid, addr):
         seq_id = bytes(data[0:8])
         stage = int.from_bytes(data[8:12],byteorder="big")
@@ -188,10 +240,13 @@ class SwarmProtocol(AbstractProtocol):
             if self.rank == 0:
                 SwarmProtocol.train(self.net,self.optimizer, inp_batch=self.buffer_out.get(seq_id)[0],output=data, rank = 0, stage = -1)
                 tmp = []
-                self.len_sizes = []
+                
                 for param in self.net.parameters():
+                    if param.grad == None:
+                        tmp.append(zeros_like(param.data).view(-1))
+                        
+                        continue
                     tmp.append(param.grad.view(-1))
-                    self.len_sizes.append(len(tmp[-1]))
                 loop = asyncio.get_running_loop()
                 self.prev_grad = cat(tmp)
                 for peer in self.same_stage:
@@ -200,88 +255,41 @@ class SwarmProtocol(AbstractProtocol):
                     loop.create_task(self.send_stream(peer,pickle.dumps(self.prev_grad),seqdata=seq_id))
                     
                 self.aggregation.append(self.prev_grad)
-                
-                if len(self.aggregation) >= len(self.same_stage):
-                    self._apply_grad()
-                    # print("\n\n\n\ncalculated")
-                    # if self.iter > 3:
-                    #     print("TRAINING COMPLETE")
-                    #     return
-                    try:
-                        if self.iter > 10:
-                            print("finished training")
-                            return
-                        batch_idx, ret = next(self.dataloader)
-                        data = ret['text']
-                        target = ret['text']
-                    except StopIteration :
-                        print("TRAINING COMPLETE")
-                        return
-                    del self.buffer_in[seq_id]
-                    del self.buffer_out[seq_id]
-                    new_seq_id = os.urandom(8)
-                    while self.buffer_out.get(new_seq_id) != None:
-                        new_seq_id = os.urandom(8)
-                    
-                    ret = SwarmProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
-                    ret.retain_grad()
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(
-                                self.send_forward(new_seq_id,target, ret))
+                self.check_for_back()
             else:
                 
                 self.send_back(seq_id,data)
         elif self.rank == stage:
             self.aggregation.append(data)
             print("collecting...\n\n\n\n")
-            if len(self.aggregation) >= len(self.same_stage):
-                self._apply_grad()
-                if self.rank == 0:
-                    try:
-                        if self.iter > 10:
-                            print("finished training")
-                            return
-                        batch_idx, ret = next(self.dataloader)
-                        data = ret['text']
-                        target = ret['text']
-                    except StopIteration :
-                        print("TRAINING COMPLETE")
-                        return
-                    new_seq_id = os.urandom(8)
-                    while self.buffer_out.get(new_seq_id) != None:
-                        new_seq_id = os.urandom(8)
-                    
-                    ret = SwarmProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
-                    ret.retain_grad()
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(
-                            self.send_forward(new_seq_id,target, ret))
+            self.check_for_back()
+            
         else:
             if len(self.same_stage) >= 1 and Peer.get_current().pub_key == "1":
                 print("ME")
                 exit()
             if Peer.get_current().pub_key == "4":
                 print("FORWARDS")
-            try:
-                if self.rank == 0:
-                    loss = self.net.task_layer(data,self.buffer_in.get(seq_id)[0])
-                    loss.backward()
-                    if self.iter % 10 == 0:
-                        print(loss.item())
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(self.send_stream(nodeid,pickle.dumps(data.grad),seqdata=seq_id))
+            
+            if self.rank == 0:
+                loss = self.net.task_layer(data,self.buffer_in.get(seq_id)[0])
+                loss.backward()
+                if self.iter % 10 == 0:
+                    print(loss.item())
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.send_stream(nodeid,pickle.dumps(data.grad),seqdata=seq_id))
                     
-                else:
+            else:
+                if self.forward_start!= None:
+                    print("TIME IT TOOK", (datetime.now() - self.forward_start).seconds)
+                self.forward_start = datetime.now()
                     
-                    
-                    ret = SwarmProtocol.train(self.net,self.optimizer, inp_batch=data, rank = self.rank, stage = 1)
-                    ret.retain_grad()
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(
+                ret = SwarmProtocol.train(self.net,self.optimizer, inp_batch=data, rank = self.rank, stage = 1)
+                ret.retain_grad()
+                loop = asyncio.get_running_loop()
+                loop.create_task(
                             self.send_forward(seq_id,data,ret,nodeid))
-            except Exception as e:
-                print("ERROR IN TRAINING?!",e.with_traceback())
-                exit()
+           
             self.send_complete(seq_id,nodeid)
             # loop.create_task(self.se)  
         return

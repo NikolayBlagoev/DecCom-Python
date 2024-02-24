@@ -58,9 +58,10 @@ class AbstractProtocol(object):
                         submodule._taken[submodule.offers.get(attr)] = val
                         return
             if not hasattr(submodule,"submodule") or submodule.submodule == None:
-                raise Exception("Cannot find any method to bind to",attr)
+                raise Exception("Cannot find any method to bind to",attr,"asked to be bound to",val)
             else:
                 AbstractProtocol.set_if_have(submodule.submodule,attr,val)
+                return
         else:
             if submodule._taken.get(attr) != None:
                 raise Exception(attr,"already taken by",submodule._taken.get(attr))
@@ -68,7 +69,7 @@ class AbstractProtocol(object):
             getattr(submodule,attr)(val)
             submodule._taken[attr] = val
             return
-        raise Exception("Cannot find any method to bind to",attr)
+        raise Exception("Cannot find any method to bind to",attr,"asked to be bound to",val,"bottom")
     def __init__(self, submodule = None, callback: Callable[[tuple[str, int], bytes], None] = lambda addr, data: ...):
         self.started = False
         self.submodule = submodule

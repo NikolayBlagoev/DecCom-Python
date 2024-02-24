@@ -4,7 +4,7 @@ import asyncio
 from deccom.cryptofuncs.hash import SHA256
 from deccom.nodes import StreamNode
 from deccom.protocols.defaultprotocol import DefaultProtocol
-from deccom.protocols.gossipprotocol import GossipProtocol
+from deccom.protocols.peerdiscovery.gossipdiscovery import GossipProtocol
 from deccom.peers import Peer
 from deccom.protocols.streamprotocol import StreamProtocol
 from trainingnode import TrainingNode
