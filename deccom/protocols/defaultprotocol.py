@@ -82,7 +82,7 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         return super().connection_lost(exc)
     
     async def sendto(self,msg,addr):
-        
+        print("sending to",addr)
         trmp = bytearray(b'\x01')
         trmp = trmp + msg
         self.transport.sendto(trmp, addr=addr)

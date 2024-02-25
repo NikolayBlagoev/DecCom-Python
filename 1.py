@@ -1,11 +1,11 @@
 import asyncio
 from deccom.nodes import StreamNode, Node
-from deccom.protocols.approvalprotocol import ApprovalProtocol
+from deccom.protocols.securityprotocols import Noise
 from deccom.protocols.defaultprotocol import DefaultProtocol
 from deccom.protocols.peerdiscovery import GossipDiscovery
 from deccom.peers import Peer
 from deccom.protocols.streamprotocol import StreamProtocol
-n = Peer(("127.0.0.1", 10015), pub_key="1")
+n = Peer(("127.0.0.1", 10015))
 Peer.me = n
 
 # def send(nd: StreamNode):
@@ -14,7 +14,7 @@ Peer.me = n
 protocol = DefaultProtocol()
 gossip = GossipDiscovery()
 gossip.set_lower(protocol)
-approval = ApprovalProtocol()
+approval = Noise()
 approval.set_lower(gossip)
 print(approval.submodule)
 stream = StreamProtocol(True, peer_connected_callback = print, disconnected_callback = print)

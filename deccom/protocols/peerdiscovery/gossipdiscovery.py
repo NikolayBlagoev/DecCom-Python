@@ -57,7 +57,9 @@ class GossipDiscovery(AbstractPeerDiscovery):
             for p in self.bootstrap_peers:
                 await self.introduce_to_peer(p)
                 msg = bytearray([GossipDiscovery.ASK_FOR_ID])
-                await self._lower_sendto(msg,p.addr)
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._lower_sendto(msg,p.addr))
+                
         if rand == 0 and len(ids) >= 2:
 
             p1 = ids[randint(0, len(ids)-1)]

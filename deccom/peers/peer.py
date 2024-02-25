@@ -4,24 +4,27 @@ from deccom.cryptofuncs.signatures import *
 from ecdsa import SigningKey
 class Peer(object):
     me = None
-    def __init__(self, addr, pub_key: SigningKey  = "", tcp = None, id_node = None) -> None:
+    def __init__(self, addr, pub_key: SigningKey  = None, tcp = None, id_node = None, proof_of_self = None) -> None:
        
         self.priv_key = None
         if pub_key == None:
             self.key = gen_key()
             pub_key = self.key.verifying_key.to_der()
             self.priv_key = self.key.to_string()
+            print(type(self.key))
             # print(pub_key)
         elif pub_key == "":
             pub_key = f"{random.randint(0,100000)}"
         
         if id_node == None:
             id_node = SHA256(pub_key)
-
+        
         self.id_node = id_node
         self.pub_key = pub_key
         self.addr = addr
         self.tcp = tcp
+        # if proof_of_self != None:
+        #     proof_of_self = SHA256([pub_key,addr[0],addr[1],])
         # print("pub_key",pub_key)
         pass
 
