@@ -3,9 +3,9 @@ from ecdsa import SigningKey, NIST256p, VerifyingKey
 def gen_key():
     return SigningKey.generate(curve=NIST256p)
 
-def sign(key: SigningKey, hash):
+def sign(key: SigningKey, hash: bytes):
     
-    return key.sign(hash)
+    return key.sign_deterministic(hash)
 def verify(key: VerifyingKey, hash, sign):
     if isinstance(key,bytes):
         key = VerifyingKey.from_der(key)

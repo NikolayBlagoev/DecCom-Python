@@ -14,7 +14,7 @@ Peer.me = n
 protocol = DefaultProtocol()
 gossip = GossipDiscovery()
 gossip.set_lower(protocol)
-approval = Noise()
+approval = Noise(encryption_mode="sign_only")
 approval.set_lower(gossip)
 print(approval.submodule)
 stream = StreamProtocol(True, peer_connected_callback = print, disconnected_callback = print)
