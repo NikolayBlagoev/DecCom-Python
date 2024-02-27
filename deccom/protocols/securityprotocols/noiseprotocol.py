@@ -34,6 +34,8 @@ class Noise(AbstractProtocol):
         super().__init__(submodule, callback)
         if encryption_mode.lower() not in ["plaintext", "chacha", "sign_only"]:
             raise Exception(f"Encryption mode not recognised: ${encryption_mode}, should be one of plaintext, sign_only, or chacha")
+        if not strict and encryption_mode != "plaintext":
+            raise Exception("Not strict mode requires plaintext encryption mode")
         self.encryption_mode = encryption_mode.lower()
         self.strict = strict
         self.awaiting_approval: dict[tuple[tuple[str,int],bytes], tuple[int, Peer, tuple[str,int], Callable, Callable]] = dict()
@@ -88,10 +90,22 @@ class Noise(AbstractProtocol):
             self.approved_connections[(addr,other.id_node)] = other
             self.keys[addr] = (ChaCha20Poly1305(shared),other)
             success(addr,other)
-        elif data[0] == Noise.FALLTHROUGH:
-            if self.encryption_mode == "plaintext":
+        elif data[0] == Noise.FALLTHROUGH or data[0] ^ Noise.FALLTHROUGH == 64 or data[0] ^ Noise.FALLTHROUGH == 192:
+            strategy = data[0] ^ Noise.FALLTHROUGH
+            if strategy == 0:
+                strategy == "plaintext"
+            elif strategy == 192:
+                strategy == "chacha"
+            elif strategy == 64:
+                strategy == "sign_only" 
+            if self.strict and self.encryption_mode != strategy:
+                return
+            
+            
+
+            if strategy == "plaintext":
                 self.callback(addr,data[1:])
-            elif self.encryption_mode == "sign_only":
+            elif strategy == "sign_only":
                 if len(data) < 66:
                     return
                 signature = data[1:65]
@@ -102,7 +116,7 @@ class Noise(AbstractProtocol):
                 if not verify(other.pub_key,SHA256(data[65:]),signature):
                     return
                 return self.callback(addr,data[65:])
-            elif self.encryption_mode == "chacha":
+            elif strategy == "chacha":
                 if len(data) < 78:
                     return
                 if self.keys.get(addr) == None:
@@ -132,13 +146,18 @@ class Noise(AbstractProtocol):
         
 
     async def sendto(self, msg, addr):
-        tmp = bytearray([Noise.FALLTHROUGH])
+        prepend = Noise.FALLTHROUGH
+        tmp = bytearray([])
         if self.encryption_mode == "plaintext":
+            # prepend = prepend ^ b'00000000'
+            tmp += prepend
             tmp += msg
             return await self._lower_sendto(tmp, addr)
         elif self.encryption_mode == "chacha":
             if self.keys.get(addr) == None:
                 raise Exception("NO AUTHENTICATED CONNECTION")
+            prepend = prepend ^ b'11000000'
+            tmp += prepend
             aed = self.keys[addr][0]
             nonce = urandom(12)
             signature = sign(Peer.me.key, SHA256(msg))
@@ -147,6 +166,8 @@ class Noise(AbstractProtocol):
             return await self._lower_sendto(tmp, addr)
 
         elif self.encryption_mode == "sign_only":
+            prepend = prepend ^ b'01000000'
+            tmp += prepend
             tmp+= sign(Peer.get_current().key,SHA256(msg))
             tmp += msg
             return await self._lower_sendto(tmp, addr)
