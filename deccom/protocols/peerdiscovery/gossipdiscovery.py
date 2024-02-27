@@ -105,28 +105,17 @@ class GossipDiscovery(AbstractPeerDiscovery):
             other, i = Peer.from_bytes(data[1:])
             print("introduction form", other.pub_key)
             other.addr = addr
-            if self.peer_crawls.get(other.id_node) != None:
-                self.peer_crawls[other.id_node].set_result("success")
-                del self.peer_crawls[other.id_node]
-            if self.peers.get(other.id_node) != None:
-
-                self.peers[other.id_node].addr = addr
-            else:
-                self.connection_approval(addr,other,self.add_peer,self.ban_peer)
+            
+            
+            self.connection_approval(addr,other,self.add_peer,self.ban_peer)
 
         elif data[0] == GossipDiscovery.PULL:
             
             flag = False
             other, i = Peer.from_bytes(data[1:])
-            # print("request to pull from", other.pub_key)
-            if self.peer_crawls.get(other.id_node) != None:
-                self.peer_crawls[other.id_node].set_result("success")
-                del self.peer_crawls[other.id_node]
-            if self.peers.get(other.id_node) == None:
-                flag = True
-            else:
-                self.peers[other.id_node].addr = other.addr
-                self.peers[other.id_node].tcp = other.tcp
+            
+            
+            
             ids = list(self.peers.keys())
             if len(ids) > 1:
                 rand_node = randint(0, len(ids)-1)
@@ -136,15 +125,12 @@ class GossipDiscovery(AbstractPeerDiscovery):
                 msg = msg + bytes(self.peers[ids[rand_node]])
                 loop = asyncio.get_running_loop()
                 loop.create_task(self._lower_sendto(msg, addr))
-            if flag:
-                self.connection_approval(addr,other,self.add_peer,self.ban_peer)
+            
+            self.connection_approval(addr,other,self.add_peer,self.ban_peer)
         elif data[0] == GossipDiscovery.PULLED:
             # print("pulled")
             other, i = Peer.from_bytes(data[1:])
             # print("pulled a", other.pub_key)
-            if self.peer_crawls.get(other.id_node) != None:
-                self.peer_crawls[other.id_node].set_result("success")
-                del self.peer_crawls[other.id_node]
             
             self.connection_approval(addr,other,self.add_peer,self.ban_peer)
             loop = asyncio.get_running_loop()
@@ -153,10 +139,9 @@ class GossipDiscovery(AbstractPeerDiscovery):
         elif data[0] == GossipDiscovery.PUSH:
             # print("request to push")
             other, i = Peer.from_bytes(data[1:])
-            if self.peer_crawls.get(other.id_node) != None:
-                self.peer_crawls[other.id_node].set_result("success")
-                del self.peer_crawls[other.id_node]
-            self.peers[other.id_node] = other
+            
+            # self.peers[other.id_node] = other
+            self.connection_approval(other.addr,other,self.add_peer,self.ban_peer)
         elif data[0] == GossipDiscovery.FIND:
             # print("peer looking")
             if self.sent_finds.get(data) != None:
@@ -172,7 +157,7 @@ class GossipDiscovery(AbstractPeerDiscovery):
                 loop = asyncio.get_running_loop()
                 loop.create_task(self.introduce_to_peer(seeker))
 
-                self.peers[seeker.id_node] = seeker
+                
                 self.connection_approval(addr,seeker,self.add_peer,self.ban_peer)
             elif self.peers.get(id) == None:
                 l = list(self.get_peers())
@@ -204,6 +189,9 @@ class GossipDiscovery(AbstractPeerDiscovery):
         await self._lower_ping(addr, success, fail, timeout)
 
     def add_peer(self, addr: tuple[str,int], p: Peer):
+        if self.peer_crawls.get(p.id_node) != None:
+            self.peer_crawls[p.id_node].set_result("success")
+            del self.peer_crawls[p.id_node]
         self.peers[p.id_node] = p
         print("added peer")
         super().add_peer(addr, p)

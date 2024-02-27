@@ -132,7 +132,7 @@ class StreamProtocol(AbstractProtocol):
         
         
         if data == b'':
-            if node_id!=None:
+            if node_id !=None and self.connections.get(node_id) != None:
                 self.connections[node_id].fut = None
             print("closing", addr,node_id)
             self.remove_from_dict(node_id)

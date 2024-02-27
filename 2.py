@@ -1,5 +1,6 @@
 import asyncio
 from deccom.nodes import StreamNode, Node
+from deccom.protocols.peerdiscovery.kademliadiscovery import KademliaDiscovery
 from deccom.protocols.securityprotocols import Noise
 from deccom.protocols.defaultprotocol import DefaultProtocol
 from deccom.protocols.peerdiscovery import GossipDiscovery
@@ -12,9 +13,9 @@ def send(nd: StreamNode):
     print("TIME TO SEND")
     asyncio.create_task(nd.sendto(b'hi',("127.0.0.1", 10015)))
 protocol = DefaultProtocol()
-gossip = GossipDiscovery(bootstrap_peers=[n])
+gossip = KademliaDiscovery(bootstrap_peers=[n])
 gossip.set_lower(protocol)
-approval  = Noise(encryption_mode="sign_only")
+approval  = Noise()
 approval.set_lower(gossip)
 stream = StreamProtocol(True, peer_connected_callback= print, disconnected_callback=print)
 stream.set_lower(approval)

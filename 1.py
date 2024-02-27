@@ -1,5 +1,6 @@
 import asyncio
 from deccom.nodes import StreamNode, Node
+from deccom.protocols.peerdiscovery.kademliadiscovery import KademliaDiscovery
 from deccom.protocols.securityprotocols import Noise
 from deccom.protocols.defaultprotocol import DefaultProtocol
 from deccom.protocols.peerdiscovery import GossipDiscovery
@@ -12,9 +13,9 @@ Peer.me = n
 #     print(list(me.protocol_type.get_peers().values()))
 #     asyncio.ensure_future(nd.stream_data(list(me.protocol_type.get_peers().values())[0].id_node, b'\xe3\x32'))
 protocol = DefaultProtocol()
-gossip = GossipDiscovery()
+gossip = KademliaDiscovery()
 gossip.set_lower(protocol)
-approval = Noise(encryption_mode="sign_only")
+approval = Noise()
 approval.set_lower(gossip)
 print(approval.submodule)
 stream = StreamProtocol(True, peer_connected_callback = print, disconnected_callback = print)

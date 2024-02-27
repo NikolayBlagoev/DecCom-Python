@@ -141,7 +141,7 @@ class Noise(AbstractProtocol):
         shared = get_secret(Peer.get_current().key, from_bytes(peer.pub_key))
         print(len(sign(Peer.get_current().key, SHA256(shared))))
         msg += sign(Peer.get_current().key, SHA256(shared))
-        self.awaiting_approval[(addr,peer.id_node)] = (shared,addr,peer,success,failure)
+        self.awaiting_approval[(addr,peer.id_node)] = (shared,peer,addr,success,failure)
         loop.create_task(self._lower_sendto(msg,addr))
         
 
@@ -150,13 +150,13 @@ class Noise(AbstractProtocol):
         tmp = bytearray([])
         if self.encryption_mode == "plaintext":
             # prepend = prepend ^ b'00000000'
-            tmp += prepend
+            tmp += bytes(prepend)
             tmp += msg
             return await self._lower_sendto(tmp, addr)
         elif self.encryption_mode == "chacha":
             if self.keys.get(addr) == None:
                 raise Exception("NO AUTHENTICATED CONNECTION")
-            prepend = prepend ^ b'11000000'
+            prepend = bytes(prepend ^ b'11000000')
             tmp += prepend
             aed = self.keys[addr][0]
             nonce = urandom(12)
@@ -167,7 +167,7 @@ class Noise(AbstractProtocol):
 
         elif self.encryption_mode == "sign_only":
             prepend = prepend ^ b'01000000'
-            tmp += prepend
+            tmp += bytes(prepend)
             tmp+= sign(Peer.get_current().key,SHA256(msg))
             tmp += msg
             return await self._lower_sendto(tmp, addr)
