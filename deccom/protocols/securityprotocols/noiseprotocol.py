@@ -3,11 +3,10 @@ from typing import Any, Callable, List
 from deccom.cryptofuncs.hash import SHA256
 from deccom.peers.peer import Peer
 from deccom.protocols.abstractprotocol import AbstractProtocol
-from ecdsa import VerifyingKey
-from ecdsa.ecdh import ECDH
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from os import urandom
 from deccom.cryptofuncs.signatures import *
-from ecdsa import SigningKey, NIST256p, VerifyingKey
+
 class DictItem:
     def __init__(self,reader: asyncio.StreamReader,writer: asyncio.StreamWriter,fut: asyncio.Future, opened_by_me: int) -> None:
         self.reader = reader
@@ -33,13 +32,13 @@ class Noise(AbstractProtocol):
     required_lower = AbstractProtocol.required_lower + ["set_approve_connection"]
     def __init__(self,strict = True, encryption_mode = "plaintext", submodule=None, callback: Callable[[tuple[str, int], bytes], None] = lambda addr, data: print(addr, data)):
         super().__init__(submodule, callback)
-        if encryption_mode.lower() not in ["plaintext", "aes", "sign_only"]:
-            raise Exception(f"Encryption mode not recognised: ${encryption_mode}, should be one of plaintext, sign_only, or aes")
+        if encryption_mode.lower() not in ["plaintext", "chacha", "sign_only"]:
+            raise Exception(f"Encryption mode not recognised: ${encryption_mode}, should be one of plaintext, sign_only, or chacha")
         self.encryption_mode = encryption_mode.lower()
         self.strict = strict
         self.awaiting_approval: dict[tuple[tuple[str,int],bytes], tuple[int, Peer, tuple[str,int], Callable, Callable]] = dict()
         self.approved_connections: dict[tuple[tuple[str,int],bytes], Peer] = dict()
-        self.keys: dict[tuple[str,int], tuple[int,Peer]] = dict()
+        self.keys: dict[tuple[str,int], tuple[ChaCha20Poly1305,Peer]] = dict()
     def process_datagram(self, addr: tuple[str, int], data: bytes):
         if data[0] == Noise.CHALLENGE:
             print("CHALLENGE FROM")
@@ -48,10 +47,7 @@ class Noise(AbstractProtocol):
             if addr[0] != other.addr[0] or addr[1] != other.addr[1]:
                 print("wrong addy")
                 return
-            tmp = ECDH(curve=NIST256p)
-            tmp.load_private_key(Peer.get_current().key)
-            tmp.load_received_public_key_der(other.pub_key)
-            shared = tmp.generate_sharedsecret()
+            shared = get_secret(Peer.get_current().key, from_bytes(other.pub_key))
             if not verify(other.pub_key,SHA256(shared),data[i:]):
                 print("BAD VERIFICATION")
                 return
@@ -64,7 +60,7 @@ class Noise(AbstractProtocol):
                 success = self.awaiting_approval[(addr,other.id_node)][3]
                 peer = self.awaiting_approval[(addr,other.id_node)][1]
                 addie = self.awaiting_approval[(addr,other.id_node)][2]
-                self.keys[addr] = (shared,other)
+                self.keys[addr] = (ChaCha20Poly1305(shared),other)
                 success(addie,peer)
                 del self.awaiting_approval[(addr,other.id_node)]
                 self.approved_connections[(addr,other.id_node)] = peer
@@ -90,7 +86,7 @@ class Noise(AbstractProtocol):
                 return
             del self.awaiting_approval[(addr,other.id_node)]
             self.approved_connections[(addr,other.id_node)] = other
-            self.keys[addr] = (shared,other)
+            self.keys[addr] = (ChaCha20Poly1305(shared),other)
             success(addr,other)
         elif data[0] == Noise.FALLTHROUGH:
             if self.encryption_mode == "plaintext":
@@ -103,9 +99,24 @@ class Noise(AbstractProtocol):
                     return
                 other = self.keys[addr][1]
 
-                if not verify(other.pub_key,data[65:],signature):
+                if not verify(other.pub_key,SHA256(data[65:]),signature):
                     return
                 return self.callback(addr,data[65:])
+            elif self.encryption_mode == "chacha":
+                if len(data) < 78:
+                    return
+                if self.keys.get(addr) == None:
+                    return
+                other = self.keys[addr][1]
+                nonce = data[1:13]
+                signature = data[13:77]
+                try:
+                    decrypted = self.keys[addr][0].decrypt(nonce,data[77:],signature)
+                except:
+                    return
+                if not verify(other.pub_key,SHA256(decrypted),signature):
+                    return
+                return self.callback(addr, decrypted)
 
 
     def send_challenge(self, addr, peer: Peer, success, failure):
@@ -113,10 +124,7 @@ class Noise(AbstractProtocol):
         loop = asyncio.get_running_loop()
         msg = bytearray([Noise.CHALLENGE])
         msg += bytes(Peer.get_current())
-        tmp = ECDH(curve=NIST256p)
-        tmp.load_private_key(Peer.get_current().key)
-        tmp.load_received_public_key_der(peer.pub_key)
-        shared = tmp.generate_sharedsecret()
+        shared = get_secret(Peer.get_current().key, from_bytes(peer.pub_key))
         print(len(sign(Peer.get_current().key, SHA256(shared))))
         msg += sign(Peer.get_current().key, SHA256(shared))
         self.awaiting_approval[(addr,peer.id_node)] = (shared,addr,peer,success,failure)
@@ -128,13 +136,19 @@ class Noise(AbstractProtocol):
         if self.encryption_mode == "plaintext":
             tmp += msg
             return await self._lower_sendto(tmp, addr)
-        elif self.encryption_mode == "aes":
-            if self.encryptions.get(addr) == None:
+        elif self.encryption_mode == "chacha":
+            if self.keys.get(addr) == None:
                 raise Exception("NO AUTHENTICATED CONNECTION")
-            return
+            aed = self.keys[addr][0]
+            nonce = urandom(12)
+            signature = sign(Peer.me.key, SHA256(msg))
+            tmp += nonce + signature
+            tmp += aed.encrypt(nonce,msg,signature)
+            return await self._lower_sendto(tmp, addr)
+
         elif self.encryption_mode == "sign_only":
-            tmp+= sign(Peer.get_current().key,msg)
-            tmp+=msg
+            tmp+= sign(Peer.get_current().key,SHA256(msg))
+            tmp += msg
             return await self._lower_sendto(tmp, addr)
             
             

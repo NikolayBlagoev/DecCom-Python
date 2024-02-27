@@ -1,17 +1,16 @@
 import random
 from deccom.cryptofuncs.hash import SHA256
 from deccom.cryptofuncs.signatures import *
-from ecdsa import SigningKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 class Peer(object):
     me = None
-    def __init__(self, addr, pub_key: SigningKey  = None, tcp = None, id_node = None, proof_of_self = None) -> None:
+    def __init__(self, addr, pub_key: Ed25519PrivateKey  = None, tcp = None, id_node = None, proof_of_self = None) -> None:
        
         self.priv_key = None
         if pub_key == None:
             self.key = gen_key()
-            pub_key = self.key.verifying_key.to_der()
-            self.priv_key = self.key.to_string()
-            print(type(self.key))
+            pub_key = to_bytes(self.key.public_key())
+            print(len(pub_key))
             # print(pub_key)
         elif pub_key == "":
             pub_key = f"{random.randint(0,100000)}"
