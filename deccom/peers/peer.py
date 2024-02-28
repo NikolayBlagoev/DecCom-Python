@@ -1,9 +1,10 @@
 import random
 from deccom.cryptofuncs.hash import SHA256
-from deccom.cryptofuncs.signatures import *
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from deccom.cryptofuncs.signatures import gen_key, to_bytes
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 class Peer(object):
-    me = None
+    me: 'Peer'
+
     def __init__(self, addr, pub_key: Ed25519PrivateKey  = None, tcp = None, id_node = None, proof_of_self = None) -> None:
        
         self.priv_key = None
@@ -47,7 +48,8 @@ class Peer(object):
         else:
             ret += int(0).to_bytes(2, byteorder="big")
         return bytes(ret)
-    
+
+    @staticmethod
     def from_bytes(b: bytes):
         i = 0
         tmp = int.from_bytes(b[0:4], byteorder="big")
@@ -88,7 +90,7 @@ class Peer(object):
             tcp = None
         i+=2
         
-        return Peer((ip,port),pub_key,tcp,id_node), i
+        return Peer((ip,port), pub_key, tcp ,id_node), i
 
     def get_current():
         return Peer.me

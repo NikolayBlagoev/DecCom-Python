@@ -1,13 +1,11 @@
 import asyncio
-from deccom.nodes import StreamNode, Node
+from deccom.nodes import StreamNode
 from deccom.protocols.peerdiscovery.kademliadiscovery import KademliaDiscovery
 from deccom.protocols.securityprotocols import Noise
 from deccom.protocols.defaultprotocol import DefaultProtocol
-from deccom.protocols.peerdiscovery import GossipDiscovery
 from deccom.peers import Peer
 from deccom.protocols.streamprotocol import StreamProtocol
-n = Peer(("127.0.0.1", 10015))
-Peer.me = n
+Peer.me = Peer(("127.0.0.1"), 10015) # type:ignore
 
 # def send(nd: StreamNode):
 #     print(list(me.protocol_type.get_peers().values()))
