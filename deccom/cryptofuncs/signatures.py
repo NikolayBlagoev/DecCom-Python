@@ -70,9 +70,3 @@ def x25519_from_ed25519_public_bytes(public_bytes) -> X25519PublicKey:
     x = x * one_minus_y.invert()
 
     return bytes(x.to_bytes())
-# tst_key = gen_key()
-# print(tst_key.verifying_key)
-# pub_key = tst_key.verifying_key.to_der()
-# pub_key = VerifyingKey.from_der(pub_key)
-# print(pub_key)
-# assert pub_key == tst_key.verifying_key
