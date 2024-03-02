@@ -14,7 +14,7 @@ class Peer(object):
             self.key = gen_key()
             pub_key = to_bytes(self.key.public_key())
             print(len(pub_key))
-            # print(pub_key)
+            print(pub_key)
         elif pub_key == "":
             pub_key = f"{random.randint(0,100000)}"
 
@@ -31,46 +31,46 @@ class Peer(object):
         pass
 
 
-  # |------------------------|
-  # | Length of id_node (4B) |
-  # |------------------------|
-  # | id_node (variable)     |
-  # |------------------------|
-  # | Length of pub_key (4B) |
-  # |------------------------|
-  # | pub_key (variable)     |
-  # |------------------------|
-  # | Type of pub_key (1B)   |
-  # |------------------------|
-  # | Length of addr[0] (4B) |
-  # |------------------------|
-  # | addr[0] (variable)     |
-  # |------------------------|
-  # | addr[1] (2B)           |
-  # |------------------------|
-  # | tcp (2B, if present)   |
-  # |------------------------|
+    # |------------------------|
+    # | Length of id_node (4B) |
+    # |------------------------|
+    # | id_node (variable)     |
+    # |------------------------|
+    # | Length of pub_key (4B) |
+    # |------------------------|
+    # | pub_key (variable)     |
+    # |------------------------|
+    # | Type of pub_key (1B)   |
+    # |------------------------|
+    # | Length of addr[0] (4B) |
+    # |------------------------|
+    # | addr[0] (variable)     |
+    # |------------------------|
+    # | addr[1] (2B)           |
+    # |------------------------|
+    # | tcp (2B, if present)   |
+    # |------------------------|
 
     def __bytes__(self)->bytes:
-        ret = bytearray()
-        ret += len(self.id_node).to_bytes(4, byteorder="big") + self.id_node
+        writer = byte_writer()
+        writer.write_variable(4, self.id_node)
+
         if isinstance(self.pub_key, bytes):
-            encd = self.pub_key
-            ret += len(encd).to_bytes(4, byteorder="big") + encd + int(1).to_bytes(1, byteorder="big")
+            writer.write_variable(4, self.pub_key).write(1,1)
         elif isinstance(self.pub_key, str):
-            # print("STRING INSTANCE")
-            encd = self.pub_key.encode("utf-8")
-            ret += len(encd).to_bytes(4, byteorder="big") + encd + int(2).to_bytes(1, byteorder="big")
+            writer.write_variable(4, self.pub_key.encode("utf-8")).write(1,2)
         else:
+            print(self.pub_key)
             raise Exception("INVALID PUBLIC KEY")
-        encd = self.addr[0].encode(encoding="utf-8")
-        ret += len(encd).to_bytes(4, byteorder="big") + encd
-        ret += self.addr[1].to_bytes(2, byteorder="big")
+
+        writer.write_variable(4, self.addr[0].encode("utf-8")).write(2, self.addr[1])
+
         if self.tcp != None:
-            ret += self.tcp.to_bytes(2, byteorder="big")
+            writer.write(2, self.tcp)
         else:
-            ret += int(0).to_bytes(2, byteorder="big")
-        return bytes(ret)
+            writer.write(2, 0)
+
+        return writer.bytes()
 
     @staticmethod
     def from_bytes(b: bytes):
@@ -119,3 +119,22 @@ class byte_reader:
     def check_health(self):
         if self.head > len(self.data):
             raise IndexError("Error parsing data. reading at:", self.head, "/", len(self.data))
+
+class byte_writer:
+    def __init__(self):
+        self.data = bytearray()
+
+    def write_variable(self, length:int, data):
+        self.data += len(data).to_bytes(length, byteorder="big")
+        self.data += data
+        return self
+
+    def write(self, length:int, data):
+        self.data += data.to_bytes(length, byteorder="big")
+        return self
+
+    def write_raw(self, data:bytes):
+        self.data += data
+
+    def bytes(self):
+        return bytes(self.data)

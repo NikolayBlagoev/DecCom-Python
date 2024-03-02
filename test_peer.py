@@ -12,6 +12,8 @@ class test_byte_reader(unittest.TestCase):
     def test_read_next_variable_out_of_bounds(self):
         with self.assertRaises(IndexError):
             self.assertEqual(self.reader.read_next_variable(4), b'hello')
+
+            # world is 4 letters, but marked as 5, so it will trigger an error.
             self.assertEqual(self.reader.read_next_variable(4), b'world')
 
     def test_read_next(self):
