@@ -8,13 +8,10 @@ class Peer(object):
     me: 'Peer'
 
     def __init__(self, addr, pub_key: Ed25519PrivateKey  = None, tcp = None, id_node = None, proof_of_self = None) -> None:
-
         self.priv_key = None
         if pub_key == None:
             self.key = gen_key()
             pub_key = to_bytes(self.key.public_key())
-            print(len(pub_key))
-            print(pub_key)
         elif pub_key == "":
             pub_key = f"{random.randint(0,100000)}"
 
@@ -60,7 +57,6 @@ class Peer(object):
         elif isinstance(self.pub_key, str):
             writer.write_variable(4, self.pub_key.encode("utf-8")).write(1,2)
         else:
-            print(self.pub_key)
             raise Exception("INVALID PUBLIC KEY")
 
         writer.write_variable(4, self.addr[0].encode("utf-8")).write(2, self.addr[1])
@@ -94,7 +90,7 @@ class Peer(object):
         if tcp == 0:
             tcp = None
 
-        return Peer((ip,port), pub_key, tcp ,id_node), byte_reader.head #type: ignore
+        return Peer((ip,port), pub_key, tcp ,id_node) #type: ignore
 
     @staticmethod
     def get_current():

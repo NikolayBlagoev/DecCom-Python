@@ -1,5 +1,6 @@
 import unittest
 from deccom.peers.peer import byte_reader
+from deccom.peers.peer import Peer
 
 class test_byte_reader(unittest.TestCase):
     def setUp(self):
@@ -23,6 +24,15 @@ class test_byte_reader(unittest.TestCase):
     def test_read_next_out_of_bounds(self):
         with self.assertRaises(IndexError):
             self.reader.read_next(100)
+
+    def test_from_to_bytes_peer(self):
+        peer = Peer(("127.0.0.1", 10015))
+        peer2 = Peer.from_bytes(bytes(peer))
+        self.assertEqual(peer.id_node, peer2.id_node)
+        self.assertEqual(peer.pub_key, peer2.pub_key)
+        self.assertEqual(peer.addr, peer2.addr)
+        self.assertEqual(peer.tcp, peer2.tcp)
+
 
 if __name__ == '__main__':
     unittest.main()

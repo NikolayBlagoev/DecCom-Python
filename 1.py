@@ -5,7 +5,7 @@ from deccom.protocols.securityprotocols import Noise
 from deccom.protocols.defaultprotocol import DefaultProtocol
 from deccom.peers import Peer
 from deccom.protocols.streamprotocol import StreamProtocol
-Peer.me = Peer(("127.0.0.1"), 10015) # type:ignore
+Peer.me = Peer(("127.0.0.1", 10015)) # type:ignore
 
 # def send(nd: StreamNode):
 #     print(list(me.protocol_type.get_peers().values()))
