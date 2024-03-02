@@ -27,7 +27,7 @@ class test_byte_reader(unittest.TestCase):
 
     def test_from_to_bytes_peer(self):
         peer = Peer(("127.0.0.1", 10015))
-        peer2 = Peer.from_bytes(bytes(peer))
+        peer2, i = Peer.from_bytes(bytes(peer))
         self.assertEqual(peer.id_node, peer2.id_node)
         self.assertEqual(peer.pub_key, peer2.pub_key)
         self.assertEqual(peer.addr, peer2.addr)

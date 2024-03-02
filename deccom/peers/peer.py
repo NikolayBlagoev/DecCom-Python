@@ -74,10 +74,10 @@ class Peer(object):
 
         id_node = reader.read_next_variable(4)
         pub_key_bytes =  reader.read_next_variable(4)
-        pub_key_version = int.from_bytes(reader.read_next(1))
+        pub_key_version = int.from_bytes(reader.read_next(1), byteorder="big")
         ip = reader.read_next_variable(4).decode("utf-8")
-        port = int.from_bytes(reader.read_next(2))
-        tcp: Union[int, None] = int.from_bytes(reader.read_next(2))
+        port = int.from_bytes(reader.read_next(2), byteorder="big")
+        tcp: Union[int, None] = int.from_bytes(reader.read_next(2), byteorder="big")
 
         pub_key: Union[bytes, str]
         if pub_key_version == 1:
@@ -104,7 +104,7 @@ class byte_reader:
 
     def read_next_variable(self, length: int):
         self.head += length
-        size = int.from_bytes(self.data[self.head-length:self.head])
+        size = int.from_bytes(self.data[self.head-length:self.head], byteorder="big")
         return self.read_next(size)
 
     def read_next(self, length: int):

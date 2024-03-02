@@ -183,8 +183,8 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         msg += uniq_id
         for p in best_guess:
             msg += bytes(p)
-            loop = asyncio.get_running_loop()
-            loop.create_task(self._lower_sendto(msg, addr))
+        loop = asyncio.get_running_loop()
+        loop.create_task(self._lower_sendto(msg, addr))
     async def send_ping(self, addr, success, fail, timeout):
         await self._lower_ping(addr, success, fail, timeout)
     async def send_find(self, unique_id, p: Peer):
@@ -223,15 +223,17 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         unique_id = os.urandom(8)
         while self.searches.get(unique_id) != None:
             unique_id = os.urandom(8)
-            self.peer_crawls[id] = (fut, unique_id)
-            msg = bytearray([KademliaDiscovery.FIND])
+
+        
+        self.peer_crawls[id] = (fut, unique_id)
+        msg = bytearray([KademliaDiscovery.FIND])
 
         self.searches[unique_id] = id
         msg += unique_id
         if not isinstance(id, bytes):
             id = SHA256(id)
-            msg += id
-            l = self.bucket_manager.get_closest(id,10)
+        msg += id
+        l = self.bucket_manager.get_closest(id,10)
         for p in l:
             await self._lower_sendto(msg, p.addr)
 
