@@ -90,7 +90,7 @@ class Peer(object):
         if tcp == 0:
             tcp = None
 
-        return Peer((ip,port), pub_key, tcp ,id_node) #type: ignore
+        return Peer((ip,port), pub_key, tcp ,id_node), reader.get_head() #type: ignore
 
     @staticmethod
     def get_current():
@@ -115,6 +115,8 @@ class byte_reader:
     def check_health(self):
         if self.head > len(self.data):
             raise IndexError("Error parsing data. reading at:", self.head, "/", len(self.data))
+    def get_head(self):
+        return self.head
 
 class byte_writer:
     def __init__(self):
