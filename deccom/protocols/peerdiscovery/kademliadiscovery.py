@@ -165,6 +165,10 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         elif data[0] == KademliaDiscovery.ASK_FOR_ID:
             print("ASKING FOR ID")
             msg = bytearray([KademliaDiscovery.INTRODUCTION])
+            print("PUBKEY", Peer.me)
+            from pprint import pprint
+            pprint(vars(Peer.me))
+
             msg = msg + bytes(Peer.get_current())
             loop = asyncio.get_running_loop()
             loop.create_task(self._lower_sendto(msg, addr))
@@ -179,8 +183,8 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         msg += uniq_id
         for p in best_guess:
             msg += bytes(p)
-        loop = asyncio.get_running_loop()
-        loop.create_task(self._lower_sendto(msg, addr))
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._lower_sendto(msg, addr))
     async def send_ping(self, addr, success, fail, timeout):
         await self._lower_ping(addr, success, fail, timeout)
     async def send_find(self, unique_id, p: Peer):
@@ -213,21 +217,21 @@ class KademliaDiscovery(AbstractPeerDiscovery):
             self._lower_ping(ret[1].addr, lambda addr, peer=ret[1], self=self: self.update_peer(peer), lambda addr, oldp=ret[1], self=self: self.remove_peer(addr, oldp.id_node), 10)
         else:
             self.successful_add(addr,p)
-        
+
     
     async def _find_peer(self, fut, id):
         unique_id = os.urandom(8)
         while self.searches.get(unique_id) != None:
             unique_id = os.urandom(8)
-        self.peer_crawls[id] = (fut, unique_id)
-        msg = bytearray([KademliaDiscovery.FIND])
-        
+            self.peer_crawls[id] = (fut, unique_id)
+            msg = bytearray([KademliaDiscovery.FIND])
+
         self.searches[unique_id] = id
         msg += unique_id
         if not isinstance(id, bytes):
             id = SHA256(id)
-        msg += id
-        l = self.bucket_manager.get_closest(id,10)
+            msg += id
+            l = self.bucket_manager.get_closest(id,10)
         for p in l:
             await self._lower_sendto(msg, p.addr)
 
