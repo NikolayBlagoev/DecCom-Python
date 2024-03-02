@@ -30,7 +30,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         self.searches: dict[bytes,bytes] = dict()
     async def start(self):
         await super().start()
-        self.bucket_manager = BucketManager(Peer.me.id_node,self.k)
+        self.bucket_manager = BucketManager(Peer.me.id_node,self.k,self._add)
         for p in self.bootstrap_peers:
             await self.introduce_to_peer(p)
             msg = bytearray([KademliaDiscovery.ASK_FOR_ID])
@@ -170,9 +170,8 @@ class KademliaDiscovery(AbstractPeerDiscovery):
             loop.create_task(self._lower_sendto(msg, addr))
             
         else:
-            self.callback(addr, data[1:])
-        return
-
+            return self.callback(addr, data[1:])
+        
     
     def send_find_response(self, addr, best_guess: list[Peer], uniq_id):
         
@@ -191,20 +190,27 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         msg += unique_id
         msg += self.searches[unique_id]
         await self._lower_sendto(msg,p.addr)
-    def successful_add(self,addr: tuple[str,int], p: Peer):
+    def successful_add(self, addr: tuple[str,int], p: Peer):
         if self.peer_crawls.get(p.id_node) != None:
                 self.peer_crawls[p.id_node][0].set_result("success")
                 del self.searches[self.peer_crawls[p.id_node][1]]
                 del self.peer_crawls[p.id_node]
         self.bucket_manager.update_peer(p.id_node,p)
         super().add_peer(addr, p)
+    async def _async_add(self,addr,p):
+        return self.successful_add(addr,p)
+    def _add(self, dist, p: Peer):
+        loop = asyncio.get_event_loop()
+        loop.create_task(self._async_add(p.addr,p))
+        
+        
     def update_peer(self, p: Peer):
-        self.bucket_manager.update_peer(p.id_node)
+        self.bucket_manager.update_peer(p.id_node, p)
     def add_peer(self, addr: tuple[str,int], p: Peer):
-        print(p)
+        # print(p)
         ret = self.bucket_manager.add_peer(p.id_node,p)
         if ret != None:
-            self._lower_ping(ret.addr, lambda addr, peer=ret, self=self: self.update_peer(peer.id_node,peer), lambda addr, peer=p, self=self: self.successful_add(addr, p), 5)
+            self._lower_ping(ret[1].addr, lambda addr, peer=ret[1], self=self: self.update_peer(peer), lambda addr, oldp=ret[1], self=self: self.remove_peer(addr, oldp.id_node), 10)
         else:
             self.successful_add(addr,p)
         

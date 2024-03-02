@@ -139,7 +139,7 @@ class Noise(AbstractProtocol):
         msg = bytearray([Noise.CHALLENGE])
         msg += bytes(Peer.get_current())
         shared = get_secret(Peer.get_current().key, from_bytes(peer.pub_key))
-        print(len(sign(Peer.get_current().key, SHA256(shared))))
+        # print(len(sign(Peer.get_current().key, SHA256(shared))))
         msg += sign(Peer.get_current().key, SHA256(shared))
         self.awaiting_approval[(addr,peer.id_node)] = (shared,peer,addr,success,failure)
         loop.create_task(self._lower_sendto(msg,addr))

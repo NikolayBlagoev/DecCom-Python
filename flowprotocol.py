@@ -29,16 +29,11 @@ class FlowProtocol(AbstractProtocol):
     CANCEL_FLOW = int.from_bytes(b'\xc5', byteorder="big")
     offers = dict(AbstractProtocol.offers,**{  
                 
-                "disconnect_callback": "set_disconnect_callback",
-                "get_peer": "get_peer",
-                "connected_callback": "set_connected_callback",
-                "send_ping": "send_ping"
+                
                 })
     bindings = dict(AbstractProtocol.bindings, **{
-                    "remove_peer":"set_disconnect_callback",
-                    "_lower_ping": "send_ping",
-                    "peer_connected": "set_connected_callback",
-                    "_lower_get_peer": "get_peer"
+                    "_lower_broadcast":"broadcast",
+                    "_lower_getal": "get_al"
                     
                 })
     required_lower = AbstractProtocol.required_lower + ["send_ping","get_peer", "connected_callback", "disconnect_callback"]
@@ -54,11 +49,8 @@ class FlowProtocol(AbstractProtocol):
             self.desired_flow = flow_min
         elif flow_max > 0 and flow_min == 0:
             self.desired_flow = flow_max
-        self._lower_ping = lambda : ...
-        self._lower_get_peer = lambda : ...
-        self.peer_connected_callback = lambda : ...
-        self.disconnect_callback = lambda : ...
-        
+        self._lower_broadcast = lambda : ...
+        self._lower_get_al = lambda : ...
         self.tmp = get_cost
         if isinstance(get_cost,dict):
             self.get_cost = lambda peerid,i: self.tmp[peerid]
@@ -67,13 +59,13 @@ class FlowProtocol(AbstractProtocol):
         
         
         self.target: dict[bytes, dict[bytes,float]] = dict()
-        self.flowfromto: dict[tuple[bytes,bytes],int] = dict()
-        self.flowto: dict[bytes,int] = dict()
+
+        self.flowfrom: dict[tuple[bytes,bytes],bytes] = dict()
+        self.flowto: dict[bytes,bytes] = dict()
         self.requests: dict[tuple[bytes,bytes],float] = dict()
+        self.outstanding_flow: dict[bytes, bytes] = dict()
         self.flow_peers: dict[bytes, FlowPeer] = dict()
 
-        self.flows: int = 0
-        self.attempt: int = 0
         self.targets = []
         
         self.capacity = capacity
@@ -81,132 +73,51 @@ class FlowProtocol(AbstractProtocol):
     
 
     def process_datagram(self, addr: tuple[str, int], data: bytes):
+        p: Peer = self._lower_get_al(addr)
         if data[0] == FlowProtocol.INTRODUCTION:
-            peerid = data[1:33]
-            stage = data[33]
-            target = data[34]
-            desired_flow = int.from_bytes(data[34:38],byteorder="big")
-            if stage == self.stage + 1 and self.flow_peers.get(peerid) == None:
-                self.flow_peers[peerid] = FlowPeer(desired_flow,peerid,addr,1)
-                if target == 0:
-                    self.flow_peers[peerid].min_cost_target = 0
-                    self.flow_peers[peerid].minid = peerid
-                    self.flow_peers[peerid].cost_target[peerid] = 0
-                    self.targets.append(peerid)
-                    self.target[peerid][peerid] = self.get_cost(peerid,0)
-                    # update distance self??
-                # reintroduce
-            elif stage == self.stage - 1 and self.flow_peers.get(peerid) == None:
-                self.flow_peers[peerid] = FlowPeer(desired_flow,peerid,addr,-1)
-                # reintroduce
-        elif data[0] == FlowProtocol.REQUEST_FLOW:
-            peerid = data[1:33]
-            target = data[33:65]
-            stage = data[66]
-            estimated_cost = struct.unpack(">f",data[67:])
-            if Peer.get_current().id_node == target:
-                # is me
-                return
-            elif self.target.get(peerid) == None or (self.flow >= self.capacity and self.flow_peers[peerid].direction == -1): # capacity matters !
-                # send infinity
-                return  
-            elif self.target.get(peerid) != estimated_cost:
-                
-                # send updated cost (reject)
-                return
-            else:
-                # accept the flow
-                
-                loop = asyncio.get_running_loop()
-                loop.create_task(self.confirm_flow(target,peerid,addr,estimated_cost,self.flow_peers[peerid].direction))
-                
-        elif data[0] == FlowProtocol.ANSWER_FLOW:
-            peerid = data[1:33]
-            target = data[33:65]
-            stage = data[65]
-            cost = struct.unpack(">f",data[66:])
-            if self.requests.get((peerid,target)) == None:
-                # cancle flow 
-                return
-            elif self.requests.get((peerid,target)) == cost:
-                # flow has been accepted
-                self.flow += self.flow_peers[peerid].direction
-                if self.flowto.get(target) == None:
-                    self.flowto[target] = 0
-
-                self.flowto[target] += self.flow_peers[peerid].direction
-                if self.target[target] == None:
-                    self.target[target] = dict()
-                
-                self.target[target][peerid] = cost + self.get_cost(peerid)
-                    
-                return
-            else:
-                # flow has been rejected
-                del self.requests[(peerid,target)]
-                self.flow_peers[peerid].cost_target[target] = cost
-                # update cost to target
-                return
-                
-
-            return
-        elif data[0] == FlowProtocol.COSTTO_RESPONSE:
-            return
-        elif data[0] == FlowProtocol.CANCEL_FLOW:
-
-            return
-
+            desired_flow = data[1]
+            curr_flow = data[2]
+            stage = data[3]
+            direction = 1
+            if stage < self.stage:
+                direction = -1
+            self.flow_peers[p.id_node] = FlowPeer(desired_flow, p.id_node, addr, direction)
         self.callback(addr,data)
     async def start(self):
         await super().start()
-    async def confirm_flow(self, target: bytes, topeerid:bytes, to, cost, direction):
-        self.flow += direction
-        if self.flowto.get(target) == None:
-            self.flowto[target] = 0
-        self.flowto[target] += direction # add flow information in case cancelled
+        loop = asyncio.get_event_loop()
+        loop.call_later(7, self.introduce)
+        loop.call_later(9, self._check_flow)
+    
+    def introduce(self):
+        msg = bytearray([FlowProtocol.INTRODUCTION])
+        msg += self.desired_flow.to_bytes(1,"big")
+        msg += self.flow.to_bytes(1,"big")
+        msg += self.stage.to_bytes(1,"big")
+        loop = asyncio.get_event_loop()
+        loop.create_task(self._lower_broadcast(msg))
         
-        msg = bytearray([FlowProtocol.ANSWER_FLOW])
-        msg += Peer.get_current().id_node + target + self.stage.to_bytes(1,byteorder = "bog") + struct.pack(">f",cost)
+    async def confirm_flow(self, target: bytes, topeerid:bytes, flow_id, cost, direction):
+        
         await self._lower_sendto(msg,to)
-
+    
+    async def reject_flow(self, target: bytes, topeerid:bytes, flow_id, cost, direction):
+        
+        await self._lower_sendto(msg,to)
 
     async def request_flow(self, flow_peer: FlowPeer):
         await self._lower_sendto(msg,flow_peer.addr)
-        
+    def _check_flow(self):
+        loop = asyncio.get_event_loop()
+        loop.create_task(self.check_flow())
     async def check_flow(self):
         if self.flow <= self.desired_flow:
-            
-            candidates: list[FlowPeer]= []
-            for peerid,p in self.flow_peers.items():
-                if p.desired_flow < p.flow:
-                    candidates.append(p)
-            
 
-            if len(candidates) > 0:
-                candidate = (candidates[0],candidates[0].min_cost_target)
-                
-                # request flow
-
-            
-            return
-        else:
-            # Do nothing I guess?
-            return
+        loop = asyncio.get_event_loop()
+        loop.call_later(5, self._check_flow)
         return
-    def peer_connected(self,nodeid):
-
-        self.peer_connected_callback(nodeid)
-
-    
-    def remove_peer(self, addr, nodeid):
-        
-        self.disconnect_callback(addr,nodeid) 
     
 
 
-    def set_disconnect_callback(self, callback):
-        self.disconnect_callback = callback
-    def set_connected_callback(self, callback):
-        self.peer_connected_callback = callback
     
         
