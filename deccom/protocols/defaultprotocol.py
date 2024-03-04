@@ -8,11 +8,11 @@ class DefaultProtocol(asyncio.DatagramProtocol):
     PONG_b = b'\xd5'
     PING = int.from_bytes(PING_b, byteorder="big")
     PONG = int.from_bytes(PONG_b, byteorder="big")
-    _taken = dict()
     def __init__(self, callback: Callable[[tuple[str,int], bytes], None] = lambda addr, data: ...):
         self.transport = None
         self.callback = callback
         self.pings = dict()
+        self._taken = dict()
         
 
     def connection_made(self, transport):

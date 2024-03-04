@@ -6,7 +6,7 @@ from deccom.cryptofuncs.hash import SHA256
 from deccom.peers.peer import Peer
 from deccom.protocols.peerdiscovery.abstractpeerdiscovery import AbstractPeerDiscovery
 from ._kademlia_routing import BucketManager
-
+from deccom.protocols.wrappers import *
 class KademliaDiscovery(AbstractPeerDiscovery):
     INTRODUCTION = int.from_bytes(b'\xe1', byteorder="big") # english opening king's variation
     RESPOND_FIND = int.from_bytes(b'\xc4', byteorder="big")
@@ -20,9 +20,8 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                     "_lower_ping": "send_ping"
                     })
     required_lower = AbstractPeerDiscovery.required_lower + ["send_ping"]
-    def __init__(self, bootstrap_peers: list[Peer] = [], interval: int = 60, k: int = 20, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = None, disconnected_callback=..., peer_connected_callback: Callable[[Peer], None] = ...):
-        super().__init__(bootstrap_peers, interval, submodule, callback, disconnected_callback, peer_connected_callback)
-        self._lower_ping = lambda addr, success, failure, timeout: ...
+    def __init__(self, bootstrap_peers: list[Peer] = [], interval: int = 60, k: int = 20, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = None, disconnected_callback=..., connected_callback: Callable[[Peer], None] = ...):
+        super().__init__(bootstrap_peers, interval, submodule, callback, disconnected_callback, connected_callback)
         self.k = k
         self.peer_crawls = dict()
         self.sent_finds = dict()
@@ -85,7 +84,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         tmp = bytearray([1])
         tmp = tmp + msg
         return await self._lower_sendto(tmp, addr)
-
+      
     def process_datagram(self, addr: tuple[str, int], data: bytes):
         
         if data[0] == KademliaDiscovery.INTRODUCTION:
@@ -210,6 +209,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         
     def update_peer(self, p: Peer):
         self.bucket_manager.update_peer(p.id_node, p)
+    
     def add_peer(self, addr: tuple[str,int], p: Peer):
         # print(p)
         ret = self.bucket_manager.add_peer(p.id_node,p)
@@ -251,3 +251,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         return self.get_peer(id)
     def get_peer(self, id) -> Union[Peer,None]:
         return self.bucket_manager.get_peer(id)
+    
+    @bindto("send_ping")
+    async def _lower_ping(self, addr, success, failure, timeout):
+        return

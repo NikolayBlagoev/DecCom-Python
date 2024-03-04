@@ -2,9 +2,10 @@ import asyncio
 import random
 from deccom.utils.common import ternary_comparison
 from asyncio import exceptions
-from typing import Any, Callable, List
+from typing import Any, Callable, List, Union
 from deccom.peers.peer import Peer
 from deccom.protocols.abstractprotocol import AbstractProtocol
+from deccom.protocols.wrappers import *
 class DictItem:
     def __init__(self,reader: asyncio.StreamReader,writer: asyncio.StreamWriter,fut: asyncio.Future, opened_by_me: int) -> None:
         self.reader = reader
@@ -32,23 +33,20 @@ class StreamProtocol(AbstractProtocol):
                 })
     bindings = dict(AbstractProtocol.bindings, **{
                     "remove_peer":"set_disconnected_callback",
-                    "_lower_ping": "send_ping",
                     "peer_connected": "set_connected_callback",
                     "process_data": "set_stream_callback",
                     "_lower_get_peer": "get_peer",
                     
                 })
-    required_lower = AbstractProtocol.required_lower + ["send_ping","get_peer", "set_connected_callback", "set_disconnected_callback"]
+    required_lower = AbstractProtocol.required_lower + ["get_peer", "set_connected_callback", "set_disconnected_callback"]
     def __init__(self, always_connect: bool, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = lambda addr, data: print(addr, data),disconnected_callback = lambda addr,nodeid: print(nodeid, "disconnected"), 
-                peer_connected_callback = lambda addr, peer: ..., stream_callback = lambda data, node_id, addr: ..., stream_close_callback = lambda node_id,addr: ...):
+                connected_callback = lambda addr, peer: ..., stream_callback = lambda data, node_id, addr: ..., stream_close_callback = lambda node_id,addr: ...):
         super().__init__(submodule, callback)
         self.stream_callback = stream_callback
-        self.peer_connected_callback = peer_connected_callback
+        self.connected_callback = connected_callback
         self.disconnected_callback = disconnected_callback
         self.stream_close_callback = stream_close_callback
         self.connections: dict[bytes, DictItem]= dict()
-        self._lower_ping = lambda : ...
-        self._lower_get_peer = lambda : ...
         self.always_connect = always_connect
         
     
@@ -81,6 +79,11 @@ class StreamProtocol(AbstractProtocol):
         self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,addr))
         return
     
+    @bindto("get_peer")
+    def _lower_get_peer(self, id) -> Union[Peer,None]:
+        return None
+    
+    @bindfrom("connected_callback")
     def peer_connected(self,addr,peer: Peer):
         # print("here", nodeid)
         
@@ -89,10 +92,9 @@ class StreamProtocol(AbstractProtocol):
             if self.connections.get(peer.id_node) == None:
                 
                 asyncio.ensure_future(self.open_connection(peer.addr[0], peer.tcp, peer.id_node))
-        self.peer_connected_callback(peer)
+        self.connected_callback(peer)
         return
-    async def send_ping(self, addr, success, fail, timeout):
-        await self._lower_ping(addr, success, fail, timeout)
+    
     async def open_connection(self, remote_ip, remote_port, node_id: bytes, duplicate = False):
         # print("connection to",remote_port, node_id)
         if node_id==Peer.get_current():
@@ -123,7 +125,7 @@ class StreamProtocol(AbstractProtocol):
         writer.write(b'\n')
         await writer.drain()
     def set_connected_callback(self, callback):
-        self.peer_connected_callback = callback
+        self.connected_callback = callback
     async def listen_for_data(self, reader: asyncio.StreamReader, node_id = None, addr = None):
         
         # seqrand = random.randint(1,40000)
@@ -159,6 +161,8 @@ class StreamProtocol(AbstractProtocol):
         # print("done srream")
     def set_stream_close_callback(self, callback):
         self.stream_close_callback = callback    
+    
+    @bindfrom("stream_callback")
     async def process_data(self,data,node_id,addr):
         # print("RECEIVED FROM",node_id)
         self.stream_callback(data,node_id,addr)
@@ -178,6 +182,7 @@ class StreamProtocol(AbstractProtocol):
         self.stream_callback = callback
     def closed_stream(self, node_id, addr):
         self.stream_close_callback(node_id,addr)
+    @bindfrom("disconnected_callback")
     def remove_peer(self, addr, nodeid):
         self.remove_from_dict(nodeid)
         self.disconnected_callback(addr,nodeid) 

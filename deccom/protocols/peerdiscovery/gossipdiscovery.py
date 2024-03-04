@@ -4,7 +4,7 @@ from deccom.protocols.abstractprotocol import AbstractProtocol
 from deccom.protocols.defaultprotocol import DefaultProtocol
 from deccom.peers import Peer
 from random import randint, sample
-
+from deccom.protocols.wrappers import *
 from deccom.protocols.peerdiscovery.abstractpeerdiscovery import AbstractPeerDiscovery
 
 
@@ -23,11 +23,11 @@ class GossipDiscovery(AbstractPeerDiscovery):
                     })
     required_lower = AbstractPeerDiscovery.required_lower + ["send_ping"]
 
-    def __init__(self, bootstrap_peers: list[Peer] = [], interval: int = 10, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = None, disconnected_callback=..., peer_connected_callback: Callable[[Peer], None] = ...):
-        super().__init__(bootstrap_peers, interval, submodule, callback, disconnected_callback, peer_connected_callback)
+    def __init__(self, bootstrap_peers: list[Peer] = [], interval: int = 10, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = None, disconnected_callback=..., connected_callback: Callable[[Peer], None] = ...):
+        super().__init__(bootstrap_peers, interval, submodule, callback, disconnected_callback, connected_callback)
         self.peer_crawls = dict()
         self.sent_finds = dict()
-        self._lower_ping = lambda addr, success, failure, timeout: ...
+        
     
     async def start(self):
         await super().start()
@@ -220,3 +220,6 @@ class GossipDiscovery(AbstractPeerDiscovery):
             else:
                 await self.peer_crawls.get(id)
         return self.get_peer(id)
+    @bindto("send_ping")
+    async def _lower_ping(self, addr, success, failure, timeout):
+        return

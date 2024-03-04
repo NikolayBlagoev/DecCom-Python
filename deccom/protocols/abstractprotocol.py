@@ -1,6 +1,9 @@
 from typing import Any, Callable
 from deccom.peers.peer import Peer
 from deccom.protocols.defaultprotocol import DefaultProtocol
+from deccom.protocols.wrappers import *
+
+
 class AbstractProtocol(object):
     required_lower = ["sendto", "start", "callback"]
     offers = {  
@@ -10,7 +13,7 @@ class AbstractProtocol(object):
                 }
     bindings = dict({"_lower_start":  "start", "_lower_sendto":  "sendto", "process_datagram": "set_callback"})
     
-
+   
     def check_if_have(submodule, attr)->bool:
         
         if not hasattr(submodule,attr):
@@ -18,7 +21,7 @@ class AbstractProtocol(object):
                 if isinstance(submodule.offers, dict):
                     if submodule.offers.get(attr) != None:
                         if submodule._taken.get(submodule.offers.get(attr)) != None:
-                            raise Exception(attr,"already taken by",submodule._taken.get(submodule.offers.get(attr)))
+                            raise Exception(attr,"of", submodule,"already taken by",submodule._taken.get(submodule.offers.get(attr)))
                         return True
             if not hasattr(submodule,"submodule") or submodule.submodule == None:
                 return False
@@ -27,7 +30,8 @@ class AbstractProtocol(object):
             
         else:
             if submodule._taken.get(attr) != None:
-                raise Exception(attr,"already taken by",submodule._taken.get(attr))
+                
+                raise Exception(attr,"of", submodule,"already taken by",submodule._taken.get(attr))
             return True
         
         
@@ -52,9 +56,9 @@ class AbstractProtocol(object):
                 if isinstance(submodule.offers, dict):
                     if submodule.offers.get(attr) != None:
                         if submodule._taken.get(submodule.offers.get(attr)) != None:
-                            raise Exception(attr,"already taken by",submodule._taken.get(attr))
-                        # print("found",attr,"at",submodule, submodule.offers.get(attr))
-                        getattr(submodule,submodule.offers.get(attr))(val)
+                            raise Exception(attr,"already taken by",submodule._taken.get(attr),"while setting",val)
+                        
+                        setattr(submodule,submodule.offers.get(attr),val)
                         submodule._taken[submodule.offers.get(attr)] = val
                         return
             if not hasattr(submodule,"submodule") or submodule.submodule == None:
@@ -64,60 +68,88 @@ class AbstractProtocol(object):
                 return
         else:
             if submodule._taken.get(attr) != None:
-                raise Exception(attr,"already taken by",submodule._taken.get(attr))
-            # print("found",attr,"at",submodule)
-            getattr(submodule,attr)(val)
+                
+                raise Exception(attr,"already taken by",submodule._taken.get(attr),"while setting",val)
+            
+            setattr(submodule,attr,val)
             submodule._taken[attr] = val
             return
         raise Exception("Cannot find any method to bind to",attr,"asked to be bound to",val,"bottom")
+    
     def __init__(self, submodule = None, callback: Callable[[tuple[str, int], bytes], None] = lambda addr, data: ...):
         self.started = False
         self.submodule = submodule
         self.callback = callback
         self._taken = dict()
-        self._lower_sendto = lambda msg,addr: ...
-        self._lower_start = lambda: ...
         
+    
+    @bindfrom("callback")    
     def process_datagram(self,addr:tuple[str,int],data:bytes):
         self.callback(addr,data)
         return
-
+    
+    @bindto("sendto")
+    async def _lower_sendto(msg:bytes, addr:tuple[str,int]):
+        return
+    
+    @bindto("start")
+    async def _lower_start():
+        return
         
     async def start(self):
         await self._lower_start()
         print("started")
         self.started = True
-    
+    def recursive_check(obj, mtd, attr):
+        if not hasattr(obj, mtd):
+            return None
+        if hasattr(getattr(obj, mtd), attr):
+            return obj
+        elif obj.__class__.__base__ != None and issubclass(obj.__class__.__base__,AbstractProtocol):
+            return AbstractProtocol.recursive_check(obj.__class__.__base__, mtd, attr)
+        else:
+            return None
     def inform_lower(self):
-        # print("lower setting")
-        for k,v in self.__class__.bindings.items():
-            method = self.__class__.get_if_have(self.submodule,v)
-            if method == None:
-                continue
-            else:
-                if k[0] == "_":
-                    setattr(self,k,method)
-                    # print("setting",k,"to",method)
-                    if self.__class__.offers.get(v) and not hasattr(self,v):
-                        setattr(self, v, lambda self,**kwargs: method(self,**kwargs))
-                        # print("setting to ",self, v, "to", method)
-                    
+        
+        for name in dir(self):            
+            if callable(getattr(self, name)):
+                if hasattr(getattr(self, name), "nobind"):
+                    continue
+                ret = AbstractProtocol.recursive_check(self,name,"bindfrom")
+                if ret != None:
+                
+                    method = self.__class__.check_if_have(self.submodule,getattr(ret, name).bindfrom)
+                    if not method:
                         
-                else:
-                    self.__class__.set_if_have(self.submodule,v,getattr(self,k))
+                        continue
+                    self.__class__.set_if_have(self.submodule,getattr(ret, name).bindfrom,getattr(self,name))
+                
+                ret = AbstractProtocol.recursive_check(self,name,"bindto")
+                if ret != None:
+                
+                    method = self.__class__.get_if_have(self.submodule,getattr(ret, name).bindto)
+                    if method == None:
+                        continue
+                    setattr(self,name,method)
+                    self._taken[name] = method
+
                     
 
     def set_lower(self, submodule):
         self.submodule = submodule
+        
         for method in self.__class__.required_lower:
             if not self.__class__.check_if_have(submodule,method): 
                 raise Exception("MISSING REQUIRED!",method," in the protocol chain by ",type(self))
         
         self.inform_lower()
+    
     def get_lowest(self):
         return self.submodule.get_lowest()
+    
     def set_callback(self, callback):
         self.callback = callback
+    
     async def sendto(self,msg,addr):
         await self._lower_sendto(msg,addr)
     def __getattribute__(self, __name: str) -> Any:

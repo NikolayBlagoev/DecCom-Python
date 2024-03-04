@@ -6,7 +6,7 @@ from deccom.protocols.abstractprotocol import AbstractProtocol
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from os import urandom
 from deccom.cryptofuncs.signatures import *
-
+from deccom.protocols.wrappers import *
 class DictItem:
     def __init__(self,reader: asyncio.StreamReader,writer: asyncio.StreamWriter,fut: asyncio.Future, opened_by_me: int) -> None:
         self.reader = reader
@@ -172,7 +172,7 @@ class Noise(AbstractProtocol):
             tmp += msg
             return await self._lower_sendto(tmp, addr)
             
-            
+    @bindfrom("connection_approval")        
     def approve_peer(self, addr, peer: Peer, success, failure):
         if self.approved_connections.get((addr,peer.id_node)) != None and self.approved_connections.get((addr,peer.id_node)).id_node == peer.id_node  \
         and self.approved_connections.get((addr,peer.id_node)).addr[0] == peer.addr[0] \

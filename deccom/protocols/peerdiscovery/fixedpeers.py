@@ -14,8 +14,8 @@ class FixedPeers(AbstractPeerDiscovery):
         "broadcast": "broadcast",
         "get_al": "get_al"
     })
-    def __init__(self, peer_list: list[Peer], bootstrap_peers: list[Peer] = [], interval: int = 10, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = None, disconnected_callback=..., peer_connected_callback: Callable[[Peer], None] = ...):
-        super().__init__(bootstrap_peers, interval, submodule, callback, disconnected_callback, peer_connected_callback)
+    def __init__(self, peer_list: list[Peer], bootstrap_peers: list[Peer] = [], interval: int = 10, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = None, disconnected_callback=..., connected_callback: Callable[[Peer], None] = ...):
+        super().__init__(bootstrap_peers, interval, submodule, callback, disconnected_callback, connected_callback)
         self.p_to_a: dict[bytes,tuple[str,int]] = dict()
         self.a_to_p: dict[tuple[str,int],Peer] = dict()
         for p in peer_list:
