@@ -11,6 +11,9 @@ def gen_key():
 def sign(key: Ed25519PrivateKey, hash: bytes):
     
     return key.sign(hash)
+
+def load_key(bts):
+    return Ed25519PrivateKey.from_private_bytes(bts)
 def verify(key: Ed25519PublicKey, hash, sign):
     if isinstance(key,bytes):
         key = Ed25519PublicKey.from_public_bytes(key)
