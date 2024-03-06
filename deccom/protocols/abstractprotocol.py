@@ -131,7 +131,7 @@ class AbstractProtocol(object):
                     if method == None:
                         continue
                     setattr(self,name,method)
-                    self._taken[name] = method
+                    # self._taken[name] = method
 
                     
 
