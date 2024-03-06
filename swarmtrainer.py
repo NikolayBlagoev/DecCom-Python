@@ -113,7 +113,7 @@ elif argv[1] == "2" or argv[1] == "5":
 
 optimizer = optim.SGD(net.parameters(), lr=learning_rate,
                       momentum=momentum)
-training = SwarmProtocol(int(argv[1]) % 3,net,optimizer,enumerate(train_loader))
+training = SwarmProtocol(int(argv[1]) % 3,net,optimizer,train_loader)
 training.set_lower(stream)
 me = TrainingNode( Peer(None, pub_key=argv[1]), training,"127.0.0.1", 10015 if argv[1] == "0" else None)
 print( "TCP", me.tcp_port)

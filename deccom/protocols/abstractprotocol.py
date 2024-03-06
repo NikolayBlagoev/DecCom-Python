@@ -97,7 +97,7 @@ class AbstractProtocol(object):
         return
         
     async def start(self, p: Peer):
-        await self._lower_start()
+        await self._lower_start(p)
         print("started")
         self.peer = p
         self.started = True
