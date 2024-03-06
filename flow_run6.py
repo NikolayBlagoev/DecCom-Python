@@ -60,7 +60,7 @@ def costmap(a1, a2):
 
 
 peers = [Peer(("127.0.0.1", 10023), "3"), Peer(("127.0.0.1", 10024), "4")]
-Peer.me = Peer(("127.0.0.1", 10026), "6")
+self.peer = Peer(("127.0.0.1", 10026), "6")
 lowest = DefaultProtocol()
 prs = FixedPeers(peers)
 prs.set_lower(lowest)

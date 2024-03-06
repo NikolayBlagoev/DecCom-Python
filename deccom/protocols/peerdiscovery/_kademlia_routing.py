@@ -96,6 +96,8 @@ class KBucket(object):
 
 class BucketManager(object):
     def __init__(self, id, k, success_call, max_l = 256) -> None:
+        if isinstance(id, bytearray):
+            id = bytes(id)
         if isinstance(id, bytes):
             id = int.from_bytes(id, byteorder="big")
         self.id = id
@@ -107,6 +109,8 @@ class BucketManager(object):
             raise Exception("WRONG IDS")
         return bytes(a ^ b for a, b in zip(b1, b2))
     def get_peer(self, id) -> Peer:
+        if isinstance(id, bytearray):
+            id = bytes(id)
         if isinstance(id, bytes):
             id = int.from_bytes(id, byteorder="big")
         dist = self.id ^ id
@@ -116,6 +120,8 @@ class BucketManager(object):
     
     
     def update_peer(self, id, node) -> Peer:
+        if isinstance(id, bytearray):
+            id = bytes(id)
         if isinstance(id, bytes):
             id = int.from_bytes(id, byteorder="big")
         dist = self.id ^ id
@@ -124,6 +130,8 @@ class BucketManager(object):
    
     
     def add_peer(self,id,node, lv=0):
+        if isinstance(id, bytearray):
+            id = bytes(id)
         # print(lv)
         if isinstance(id, bytes):
             id = int.from_bytes(id, byteorder="big")
@@ -150,6 +158,8 @@ class BucketManager(object):
         # print("indx for", dist, "is",indx)
         return indx
     def remove_peer(self, id):
+        if isinstance(id, bytearray):
+            id = bytes(id)
         if isinstance(id, bytes):
             id = int.from_bytes(id, byteorder="big")
         dist = self.id ^ id
@@ -157,6 +167,8 @@ class BucketManager(object):
         self.buckets[idx].remove_peer(dist)
     
     def get_closest(self, id, alpha = None) -> list[Peer]:
+        if isinstance(id, bytearray):
+            id = bytes(id)
         if isinstance(id, bytes):
             id = int.from_bytes(id, byteorder="big")
         if alpha == None:

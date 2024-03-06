@@ -86,8 +86,8 @@ class TrainingProtocol(AbstractProtocol):
     async def _lower_find_peer(self, id: bytes) -> Peer:
         return None
     
-    async def start(self):
-        await super().start()
+    async def start(self, p: Peer):
+        await super().start(p)
         if self.pipeline_rank == 0: 
             try:
                     self.time_start = datetime.now()
@@ -164,7 +164,7 @@ class TrainingProtocol(AbstractProtocol):
                 loop = asyncio.get_running_loop()
                 self.prev_grad = cat(tmp)
                 for peer in self.dp_group:
-                    if peer == Peer.me.id_node:
+                    if peer == self.peer.id_node:
                         continue
                     loop.create_task(self.send_stream(peer,pickle.dumps(self.prev_grad),seqdata=seq_id))
                     
@@ -209,7 +209,7 @@ class TrainingProtocol(AbstractProtocol):
                 loop = asyncio.get_running_loop()
                 self.prev_grad = cat(tmp)
                 for peer in self.dp_group:
-                    if peer == Peer.me.id_node:
+                    if peer == self.peer.id_node:
                         continue
                     loop.create_task(self.send_stream(peer,pickle.dumps(self.prev_grad),seqdata=seq_id))
                     

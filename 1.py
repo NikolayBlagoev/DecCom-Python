@@ -5,7 +5,7 @@ from deccom.protocols.securityprotocols import Noise
 from deccom.protocols.defaultprotocol import DefaultProtocol
 from deccom.peers import Peer
 from deccom.protocols.streamprotocol import StreamProtocol
-Peer.me = Peer(("127.0.0.1", 10015)) # type:ignore
+self.peer = Peer(("127.0.0.1", 10015)) # type:ignore
 
 # def send(nd: StreamNode):
 #     print(list(me.protocol_type.get_peers().values()))
@@ -21,8 +21,8 @@ stream.set_lower(approval)
 
 
 me = StreamNode(stream,"127.0.0.1", 10015)
-Peer.me.tcp = me.tcp_port
-print(Peer.me.id_node)
+self.peer.tcp = me.tcp_port
+print(self.peer.id_node)
 loop = asyncio.new_event_loop()
 # loop.call_later(5,
 #                                      send, me)

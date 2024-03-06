@@ -93,12 +93,13 @@ class AbstractProtocol(object):
         return
     
     @bindto("start")
-    async def _lower_start(self):
+    async def _lower_start(self, p: Peer):
         return
         
-    async def start(self):
+    async def start(self, p: Peer):
         await self._lower_start()
         print("started")
+        self.peer = p
         self.started = True
     def recursive_check(obj, mtd, attr):
         if not hasattr(obj, mtd):

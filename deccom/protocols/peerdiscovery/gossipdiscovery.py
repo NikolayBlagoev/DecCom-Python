@@ -29,8 +29,8 @@ class GossipDiscovery(AbstractPeerDiscovery):
         self.sent_finds = dict()
         
     
-    async def start(self):
-        await super().start()
+    async def start(self, p: Peer):
+        await super().start(p)
         for p in self.bootstrap_peers:
             await self.introduce_to_peer(p)
             msg = bytearray([GossipDiscovery.ASK_FOR_ID])
@@ -78,7 +78,7 @@ class GossipDiscovery(AbstractPeerDiscovery):
 
             p1 = ids[randint(0, len(ids)-1)]
             msg = bytearray([GossipDiscovery.PULL])
-            msg = msg + bytes(Peer.me)
+            msg = msg + bytes(self.peer)
             await self._lower_sendto(msg, self.peers[p1].addr)
         loop = asyncio.get_running_loop()
         self.refresh_loop = loop.call_later(self.interval+2, self.push_or_pull)
@@ -90,7 +90,7 @@ class GossipDiscovery(AbstractPeerDiscovery):
     async def introduce_to_peer(self, peer: Peer):
         # print("introducing to", peer.id_node)
         msg = bytearray([GossipDiscovery.INTRODUCTION])
-        msg = msg + bytes(Peer.get_current())
+        msg = msg + bytes(self.peer)
         await self._lower_sendto(msg, peer.addr)
 
     async def sendto(self, msg, addr):
@@ -152,7 +152,7 @@ class GossipDiscovery(AbstractPeerDiscovery):
             id = data[i+1:]
             # print(seeker.id_node," is looking for ",id)
             self.sent_finds[data] = i
-            if id == Peer.me.id_node:
+            if id == self.peer.id_node:
                 # print("THATS ME")
                 loop = asyncio.get_running_loop()
                 loop.create_task(self.introduce_to_peer(seeker))
@@ -175,7 +175,7 @@ class GossipDiscovery(AbstractPeerDiscovery):
         elif data[0] == GossipDiscovery.ASK_FOR_ID:
             print("ASKING FOR ID")
             msg = bytearray([GossipDiscovery.INTRODUCTION])
-            msg = msg + bytes(Peer.get_current())
+            msg = msg + bytes(self.peer)
             loop = asyncio.get_running_loop()
             loop.create_task(self._lower_sendto(msg, addr))
             
@@ -201,7 +201,7 @@ class GossipDiscovery(AbstractPeerDiscovery):
         msg = bytearray([GossipDiscovery.FIND])
         if isinstance(id, str):
             id = id.encode("utf-8")
-        msg = msg + bytes(Peer.me) + id
+        msg = msg + bytes(self.peer) + id
         l = list(self.get_peers())
         for p in l:
             if self.get_peers().get(p) is None:

@@ -26,10 +26,11 @@ class FixedPeers(AbstractPeerDiscovery):
             self.a_to_p[p.addr] = p
             self.peers[p.id_node] = p
         self.introduced = []
-    async def start(self):
-        await super().start()
+    async def start(self, p: Peer):
+        await super().start(p)
         loop = asyncio.get_running_loop()
         loop.call_later(2, self.introduce_to_others)
+        
     def introduce_to_others(self):
         loop = asyncio.get_running_loop()
         for a in self.a_to_p:

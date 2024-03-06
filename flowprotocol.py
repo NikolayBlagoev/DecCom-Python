@@ -66,10 +66,10 @@ class FlowProtocol(AbstractProtocol):
         self.requested_flows:tuple[bytes,FlowPeer,float, bytes] = None
         self.costmap = costmap
         self.T = 0.5
-    async def start(self):
-        await super().start()
+    async def start(self, p : Peer):
+        await super().start(p)
         if self.stage == self.max_stage:
-            self.targets[Peer.me.id_node] = 0
+            self.targets[self.peer.id_node] = 0
         self._periodic()
     
     @bindto("get_al")
@@ -85,11 +85,11 @@ class FlowProtocol(AbstractProtocol):
             stage = int.from_bytes(data[9:17], byteorder="big")
             if stage == (self.stage-1):
 
-                fp = FlowPeer(p,stage,int.from_bytes(data[1:9], byteorder="big", signed=True), self.costmap(Peer.me.pub_key, p.pub_key))
+                fp = FlowPeer(p,stage,int.from_bytes(data[1:9], byteorder="big", signed=True), self.costmap(self.peer.pub_key, p.pub_key))
                 self.prev[p.id_node] = fp
             elif stage == (self.stage+1):
                 if stage == self.max_stage:
-                    fp = FlowPeer(p,stage,int.from_bytes(data[1:9], byteorder="big", signed=True), self.costmap(Peer.me.pub_key, p.pub_key))
+                    fp = FlowPeer(p,stage,int.from_bytes(data[1:9], byteorder="big", signed=True), self.costmap(self.peer.pub_key, p.pub_key))
                     fp.mincostto = 0
                     fp.dist_to_targ[p.id_node] = 0
                     fp.mincostis = p.id_node
@@ -97,7 +97,7 @@ class FlowProtocol(AbstractProtocol):
 
                     self.next[p.id_node] = fp
                 else:
-                    fp = FlowPeer(p,stage,int.from_bytes(data[1:9], byteorder="big", signed=True), self.costmap(Peer.me.pub_key, p.pub_key))
+                    fp = FlowPeer(p,stage,int.from_bytes(data[1:9], byteorder="big", signed=True), self.costmap(self.peer.pub_key, p.pub_key))
                     self.next[p.id_node] = fp
             elif stage == self.stage:
                 self.same[p.id_node] = SamePeer(p)
@@ -354,7 +354,7 @@ class FlowProtocol(AbstractProtocol):
             flt_them_now = struct.unpack(">f", data[101:105])[0]
             # flt_me_then = struct.unpack(">f", data[105:109])
             flt_them_then = struct.unpack(">f", data[109:113])[0]
-            if flt_them_then + self.costmap(Peer.me.pub_key, self.next[new_flow].p.pub_key) < flt_them_now + self.costmap(Peer.me.pub_key, self.next[curr_flow].p.pub_key):
+            if flt_them_then + self.costmap(self.peer.pub_key, self.next[new_flow].p.pub_key) < flt_them_now + self.costmap(self.peer.pub_key, self.next[curr_flow].p.pub_key):
                 replacement_flow = data[113:117]
                 tellthem = None
                 for k, v in self.outflow.items():
@@ -448,8 +448,8 @@ class FlowProtocol(AbstractProtocol):
                                     print("I dont know peer")
                                     continue
                                 # i know this peer
-                                mcst = self.costmap(Peer.me.pub_key, self.next[k[0]].p.pub_key)
-                                currcost = self.costmap(Peer.me.pub_key, self.next[v1[0]].p.pub_key)
+                                mcst = self.costmap(self.peer.pub_key, self.next[k[0]].p.pub_key)
+                                currcost = self.costmap(self.peer.pub_key, self.next[v1[0]].p.pub_key)
                                 # for k2, v2 in self.outflow.items():
                                 #     if v2[0] == k[0] and v2[1] == k:
                                 #         mflwid = k2

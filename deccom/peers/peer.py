@@ -5,8 +5,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from typing import Union
 
 class Peer(object):
-    me: 'Peer'
-
     def __init__(self, addr, pub_key: Ed25519PrivateKey  = None, tcp = None, id_node = None, proof_of_self = None) -> None:
         self.priv_key = None
         if pub_key == None:
@@ -92,9 +90,6 @@ class Peer(object):
 
         return Peer((ip,port), pub_key, tcp ,id_node), reader.get_head() #type: ignore
 
-    @staticmethod
-    def get_current():
-        return Peer.me
 
 
 class byte_reader:

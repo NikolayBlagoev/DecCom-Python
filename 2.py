@@ -20,9 +20,9 @@ approval.set_lower(gossip)
 stream = StreamProtocol(True, peer_connected_callback= print, disconnected_callback=print)
 stream.set_lower(approval)
 me = StreamNode(stream,"127.0.0.1")
-Peer.me = Peer((me.ip_addr,me.port), tcp=me.tcp_port)
+self.peer = Peer((me.ip_addr,me.port), tcp=me.tcp_port)
 loop = asyncio.new_event_loop()
-print(Peer.me.id_node)
+print(self.peer.id_node)
 if True:
     loop.call_later(5,
                                         send, me)

@@ -49,13 +49,13 @@ class Noise(AbstractProtocol):
             if addr[0] != other.addr[0] or addr[1] != other.addr[1]:
                 print("wrong addy")
                 return
-            shared = get_secret(Peer.get_current().key, from_bytes(other.pub_key))
+            shared = get_secret(self.peer.key, from_bytes(other.pub_key))
             if not verify(other.pub_key,SHA256(shared),data[i:]):
                 print("BAD VERIFICATION")
                 return
             msg = bytearray([Noise.RESPOND_CHALLENGE])
-            msg += bytes(Peer.get_current())
-            msg += sign(Peer.get_current().key, SHA256(shared))
+            msg += bytes(self.peer)
+            msg += sign(self.peer.key, SHA256(shared))
             loop = asyncio.get_running_loop()
             loop.create_task(self._lower_sendto(msg,addr))
             if self.awaiting_approval.get((addr,other.id_node)) != None:
@@ -137,10 +137,10 @@ class Noise(AbstractProtocol):
         print("SENDING CHALLLENGE")
         loop = asyncio.get_running_loop()
         msg = bytearray([Noise.CHALLENGE])
-        msg += bytes(Peer.get_current())
-        shared = get_secret(Peer.get_current().key, from_bytes(peer.pub_key))
-        # print(len(sign(Peer.get_current().key, SHA256(shared))))
-        msg += sign(Peer.get_current().key, SHA256(shared))
+        msg += bytes(self.peer)
+        shared = get_secret(self.peer.key, from_bytes(peer.pub_key))
+        # print(len(sign(self.peer.key, SHA256(shared))))
+        msg += sign(self.peer.key, SHA256(shared))
         self.awaiting_approval[(addr,peer.id_node)] = (shared,peer,addr,success,failure)
         loop.create_task(self._lower_sendto(msg,addr))
         
@@ -160,7 +160,7 @@ class Noise(AbstractProtocol):
             tmp += prepend
             aed = self.keys[addr][0]
             nonce = urandom(12)
-            signature = sign(Peer.me.key, SHA256(msg))
+            signature = sign(self.peer.key, SHA256(msg))
             tmp += nonce + signature
             tmp += aed.encrypt(nonce,msg,signature)
             return await self._lower_sendto(tmp, addr)
@@ -168,7 +168,7 @@ class Noise(AbstractProtocol):
         elif self.encryption_mode == "sign_only":
             prepend = prepend ^ b'01000000'
             tmp += bytes(prepend)
-            tmp+= sign(Peer.get_current().key,SHA256(msg))
+            tmp+= sign(self.peer.key,SHA256(msg))
             tmp += msg
             return await self._lower_sendto(tmp, addr)
             

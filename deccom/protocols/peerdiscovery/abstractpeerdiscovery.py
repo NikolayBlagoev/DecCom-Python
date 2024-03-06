@@ -33,7 +33,7 @@ class AbstractPeerDiscovery(AbstractProtocol):
         self.bootstrap_peers = bootstrap_peers
         self.disconnected_callback = disconnected_callback
         self.connected_callback = connected_callback
-        self.connection_approval: Callable[[tuple[str,int], Peer, Callable[[tuple[str,int],Peer],None], Callable[[tuple[str,int],Peer],None], AbstractProtocol],None] = lambda addr, peer, success, failure: success(addr,peer)
+        self.connection_approval: Callable[[tuple[str,int], Peer, Callable[[tuple[str,int],Peer],None], Callable[[tuple[str,int],Peer],None], AbstractProtocol],None] = lambda addr, peer, success, failure: self.add_peer(addr,peer)
         self.peers: dict[bytes, Peer] = dict()
     
     def set_connected_callback(self, callback: Callable[[Peer], None]):

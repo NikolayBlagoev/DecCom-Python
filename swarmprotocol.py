@@ -76,7 +76,7 @@ class SwarmProtocol(AbstractProtocol):
         
         peer: Peer = self._lower_get_peer(nodeid)
         msg = bytearray([SwarmProtocol.INTRODUCTION])
-        msg = msg + int(self.rank).to_bytes(4,byteorder="big") + Peer.me.id_node
+        msg = msg + int(self.rank).to_bytes(4,byteorder="big") + self.peer.id_node
         loop.create_task(self.sendto(msg, peer.addr))
         return
     def choose_next(self,):
@@ -126,7 +126,7 @@ class SwarmProtocol(AbstractProtocol):
         self.prev_grad = cat(tmp)
         self.aggregation.append(self.prev_grad)
         for peer in self.same_stage:
-            if peer == Peer.me.id_node:
+            if peer == self.peer.id_node:
                 continue
             loop.create_task(self.send_stream(peer,pickle.dumps(self.prev_grad),seqdata=seq_id)) 
         if len(self.aggregation) > len(self.same_stage):
@@ -135,13 +135,13 @@ class SwarmProtocol(AbstractProtocol):
         del self.buffer_in[seq_id]
         del self.buffer_out[seq_id]     
         return
-    async def start(self):
-        await super().start()
+    async def start(self, p: Peer):
+        await super().start(p)
         peers = self._lower_get_peers()
         for _,p in peers.items():
             # print("introducing to ",p.addr)
             msg = bytearray([SwarmProtocol.INTRODUCTION])
-            msg = msg  + int(self.rank).to_bytes(4,byteorder="big") + Peer.me.id_node
+            msg = msg  + int(self.rank).to_bytes(4,byteorder="big") + self.peer.id_node
             await self._lower_sendto(msg, p.addr)
         if self.rank == 0: 
             self.forward_start = datetime.now()
@@ -157,11 +157,11 @@ class SwarmProtocol(AbstractProtocol):
                     return
             
             new_seq_id = bytearray()
-            new_seq_id = int(Peer.me.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
+            new_seq_id = int(self.peer.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
             new_seq_id = bytes(new_seq_id)
             while self.buffer_out.get(new_seq_id) != None:
                     new_seq_id = bytearray()
-                    new_seq_id = int(Peer.me.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
+                    new_seq_id = int(self.peer.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
                     new_seq_id = bytes(new_seq_id)
             ret = SwarmProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
             ret.retain_grad()
@@ -214,11 +214,11 @@ class SwarmProtocol(AbstractProtocol):
                         print("TRAINING COMPLETE")
                         return
                     new_seq_id = bytearray()
-                    new_seq_id = int(Peer.me.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
+                    new_seq_id = int(self.peer.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
                     new_seq_id = bytes(new_seq_id)
                     while self.buffer_out.get(new_seq_id) != None:
                         new_seq_id = bytearray()
-                        new_seq_id = int(Peer.me.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
+                        new_seq_id = int(self.peer.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
                         new_seq_id = bytes(new_seq_id)
                     
                     ret = SwarmProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
@@ -250,7 +250,7 @@ class SwarmProtocol(AbstractProtocol):
                 loop = asyncio.get_running_loop()
                 self.prev_grad = cat(tmp)
                 for peer in self.same_stage:
-                    if peer == Peer.me.id_node:
+                    if peer == self.peer.id_node:
                         continue
                     loop.create_task(self.send_stream(peer,pickle.dumps(self.prev_grad),seqdata=seq_id))
                     
@@ -265,10 +265,10 @@ class SwarmProtocol(AbstractProtocol):
             self.check_for_back()
             
         else:
-            if len(self.same_stage) >= 1 and Peer.get_current().pub_key == "1":
+            if len(self.same_stage) >= 1 and self.peer.pub_key == "1":
                 print("ME")
                 exit()
-            if Peer.get_current().pub_key == "4":
+            if self.peer.pub_key == "4":
                 print("FORWARDS")
             
             if self.rank == 0:

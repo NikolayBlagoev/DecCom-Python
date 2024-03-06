@@ -85,7 +85,7 @@ class Pipe2(nn.Module):
 
 
 protocol = DefaultProtocol()
-gossip = KademliaDiscovery([])
+gossip = KademliaDiscovery([],interval=5)
 gossip.set_lower(protocol)
 stream = StreamProtocol(False)
 stream.set_lower(gossip)
@@ -113,8 +113,8 @@ training = TrainingProtocol(3,3,int(argv[1]),net,optimizer,train_loader)
 training.set_lower(stream)
 me = TrainingNode(training,"127.0.0.1", 10015 if argv[1] == "0" else None)
 print( "TCP", me.tcp_port)
-Peer.me = Peer((me.ip_addr,me.port), tcp=me.tcp_port, pub_key=argv[1])
-print(Peer.me.id_node)
+self.peer = Peer((me.ip_addr,me.port), tcp=me.tcp_port, pub_key=argv[1])
+print(self.peer.id_node)
 loop = asyncio.new_event_loop()
 print("run...")
 

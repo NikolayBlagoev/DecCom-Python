@@ -67,8 +67,8 @@ class StreamProtocol(AbstractProtocol):
         # print("connection from",node_id)
         if self.connections.get(node_id) != None:
             print("duplicate connection RECEIVED")
-            print(self.connections.get(node_id).opened_by_me,ternary_comparison(Peer.me.id_node, node_id))
-            if self.connections.get(node_id).opened_by_me * ternary_comparison(Peer.me.id_node, node_id) == -1:
+            print(self.connections.get(node_id).opened_by_me,ternary_comparison(self.peer.id_node, node_id))
+            if self.connections.get(node_id).opened_by_me * ternary_comparison(self.peer.id_node, node_id) == -1:
                 print("closing previous, keeping new")
                 self.remove_from_dict(node_id)
             else:
@@ -97,7 +97,7 @@ class StreamProtocol(AbstractProtocol):
     
     async def open_connection(self, remote_ip, remote_port, node_id: bytes, duplicate = False):
         # print("connection to",remote_port, node_id)
-        if node_id==Peer.get_current():
+        if node_id==self.peer:
             print("OPENING TO SELF???")
             return
         if remote_port == None:
@@ -105,7 +105,7 @@ class StreamProtocol(AbstractProtocol):
         if self.connections.get(node_id) != None:
             # print("duplicate connection OPENED")
             
-            if self.connections.get(node_id).opened_by_me * ternary_comparison(Peer.me.id_node, node_id) == -1:
+            if self.connections.get(node_id).opened_by_me * ternary_comparison(self.peer.id_node, node_id) == -1:
                 # print("closing previous, keeping new")
                 self.remove_from_dict(node_id)
             else:
@@ -121,7 +121,7 @@ class StreamProtocol(AbstractProtocol):
         self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,(remote_ip,remote_port)))
         # print("introducing myself :)")
         writer.write(b'\xe4\xe5\xf3\xc6')
-        writer.write(Peer.me.id_node)
+        writer.write(self.peer.id_node)
         writer.write(b'\n')
         await writer.drain()
     def set_connected_callback(self, callback):
