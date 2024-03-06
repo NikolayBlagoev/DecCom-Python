@@ -88,7 +88,9 @@ class TrainingProtocol(AbstractProtocol):
         await super().start()
         if self.pipeline_rank == 0: 
             try:
-                    batch_idx, (data, target) = next(self.dataloader)
+                    batch_idx, ret = next(self.dataloader)
+                    data = ret['text']
+                    target = ret['text']
             except StopIteration :
                     print("TRAINING COMPLETE")
                     return
@@ -163,7 +165,9 @@ class TrainingProtocol(AbstractProtocol):
                     self._apply_grad()
                     # print("\n\n\n\ncalculated")
                     try:
-                        batch_idx, (data, target) = next(self.dataloader)
+                        batch_idx, ret = next(self.dataloader)
+                        data = ret['text']
+                        target = ret['text']
                     except StopIteration :
                         print("TRAINING COMPLETE")
                         return
@@ -208,7 +212,9 @@ class TrainingProtocol(AbstractProtocol):
                 self._apply_grad()
                 if self.pipeline_rank == 0:
                     try:
-                        batch_idx, (data, target) = next(self.dataloader)
+                        batch_idx, ret = next(self.dataloader)
+                        data = ret['text']
+                        target = ret['text']
                     except StopIteration :
                         print("TRAINING COMPLETE")
                         return
