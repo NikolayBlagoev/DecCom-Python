@@ -92,7 +92,7 @@ class StreamProtocol(AbstractProtocol):
             if self.connections.get(peer.id_node) == None:
                 
                 asyncio.ensure_future(self.open_connection(peer.addr[0], peer.tcp, peer.id_node))
-        self.connected_callback(peer)
+        self.connected_callback(addr,peer)
         return
     
     async def open_connection(self, remote_ip, remote_port, node_id: bytes, duplicate = False):
