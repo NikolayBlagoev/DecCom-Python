@@ -97,7 +97,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         if data[0] == KademliaDiscovery.INTRODUCTION:
 
             other, i = Peer.from_bytes(data[1:])
-            print("introduction form", other.pub_key)
+            # print("introduction form", other.pub_key)
             other.addr = addr
             
                 
@@ -110,19 +110,19 @@ class KademliaDiscovery(AbstractPeerDiscovery):
 
         
         elif data[0] == KademliaDiscovery.FIND or data[0] ^ KademliaDiscovery.FIND == 1:
-            print("peer looking")
+            # print("peer looking")
             if self.sent_finds.get(data) != None:
-                print("duplicate")
+                # print("duplicate")
                 return
 
             
             i = 1
             unique_id = data[i:i+8]
             id = data[i+8:]
-            print(" is looking for ",id)
+            # print(" is looking for ",id)
             self.sent_finds[data] = i
             if id == Peer.me.id_node:
-                print("THATS ME")
+                # print("THATS ME")
                 loop = asyncio.get_running_loop()
                 msg = bytearray([KademliaDiscovery.INTRODUCTION])
                 msg = msg + bytes(Peer.get_current())
@@ -138,7 +138,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 self.send_find_response(addr,closest_peers,unique_id)
         
         elif data[0] == KademliaDiscovery.RESPOND_FIND:
-            print("got a response",addr)
+            # print("got a response",addr)
             i = 1
             unique_id = data[i:i+8]
             i+=8
@@ -150,12 +150,12 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 if peer_new == Peer.get_current():
                     continue
                 peers.append(peer_new)
-            print("got ",len(peers), "to look up",self.searches.get(unique_id))
+            # print("got ",len(peers), "to look up",self.searches.get(unique_id))
             
             if self.searches.get(unique_id) != None:
                 for p in peers:
                     if p.id_node == self.searches.get(unique_id):
-                        print("oh he in here!")
+                        # print("oh he in here!")
                         loop = asyncio.get_running_loop()
                         loop.create_task(self.send_find(unique_id,p))
                         self.connection_approval(p.addr,p,self.add_peer,self.ban_peer)
@@ -169,11 +169,11 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                     loop.create_task(self.send_find(unique_id,p))
                     
         elif data[0] == KademliaDiscovery.ASK_FOR_ID:
-            print("ASKING FOR ID")
+            # print("ASKING FOR ID")
             msg = bytearray([KademliaDiscovery.INTRODUCTION])
-            print("PUBKEY", Peer.me)
-            from pprint import pprint
-            pprint(vars(Peer.me))
+            # print("PUBKEY", Peer.me)
+            
+            # pprint(vars(Peer.me))
 
             msg = msg + bytes(Peer.get_current())
             loop = asyncio.get_running_loop()

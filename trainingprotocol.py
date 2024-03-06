@@ -11,6 +11,7 @@ from torch import zeros_like
 import torch.nn.functional as F
 import torch.optim as optim
 from torch import tensor, mean, stack, cat, split
+from datetime import datetime
 import pickle
 import asyncio
 class TrainingProtocol(AbstractProtocol):
@@ -28,7 +29,7 @@ class TrainingProtocol(AbstractProtocol):
         self.world_size = world_size
         self.pipeline_size = pipeline_size
         self.rank = rank
-
+        self.time_start = None
         # dp_group to communicate with
         self.dp_group = []
 
@@ -89,6 +90,7 @@ class TrainingProtocol(AbstractProtocol):
         await super().start()
         if self.pipeline_rank == 0: 
             try:
+                    self.time_start = datetime.now()
                     batch_idx, ret = next(self.dataloader)
                     data = ret['text']
                     target = ret['text']
@@ -167,14 +169,19 @@ class TrainingProtocol(AbstractProtocol):
                     loop.create_task(self.send_stream(peer,pickle.dumps(self.prev_grad),seqdata=seq_id))
                     
                 self.aggregation.append(self.prev_grad)
-                print("calculating\n\n\n\n",len(self.dp_group))
+                # print("calculating\n\n\n\n",len(self.dp_group))
                 if len(self.aggregation) == len(self.dp_group):
                     self._apply_grad()
-                    print("\n\n\n\ncalculated")
+                    # print("\n\n\n\ncalculated")
                     try:
+                        ttl = (datetime.now() - self.time_start).total_seconds()
+                        print(ttl)
+                        self.time_start = datetime.now()
                         batch_idx, ret = next(self.dataloader)
                         data = ret['text']
                         target = ret['text']
+                        if self.iter == 20:
+                            return
                     except StopIteration :
                         print("TRAINING COMPLETE")
                         return
@@ -219,9 +226,14 @@ class TrainingProtocol(AbstractProtocol):
                 self._apply_grad()
                 if self.pipeline_rank == 0:
                     try:
+                        ttl = (datetime.now() - self.time_start).total_seconds()
+                        print(ttl)
+                        self.time_start = datetime.now()
                         batch_idx, ret = next(self.dataloader)
                         data = ret['text']
                         target = ret['text']
+                        if self.iter == 20:
+                            return
                     except StopIteration :
                         print("TRAINING COMPLETE")
                         return
