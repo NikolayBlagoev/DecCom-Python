@@ -118,7 +118,7 @@ class TrainingProtocol(AbstractProtocol):
         for i, param in enumerate(self.net.parameters()):
             param.data = param.data - 0.01*tmp[i].view(self.sizes[i])
         self.aggregation = []
-    @bindfrom("set_stream_callback")
+    @bindfrom("st")
     def process_data(self, data:bytes, nodeid, addr):
         seq_id = bytes(data[0:8])
         
@@ -126,7 +126,7 @@ class TrainingProtocol(AbstractProtocol):
         peer: Peer = self._lower_get_peer(nodeid)
         if nodeid == self.prev:
             if self.pipeline_rank == 0:
-                loss = F.cross_entropy(data, self.buffer_in.get(seq_id))
+                loss = self.net.task_layer(data,self.buffer_in.get(seq_id)[0])
                 loss.backward()
                 if self.iter % 100 == 0:
                     print(loss.item())
