@@ -38,7 +38,7 @@ class DefaultProtocol(asyncio.DatagramProtocol):
     async def call_callback(self, addr,data):
         self.callback(addr,data)
 
-    async def start(self):
+    async def start(self, *args):
         return
     def timeout(self, addr, error, msg_id):
         if self.pings.get(msg_id) is None:

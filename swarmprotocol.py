@@ -82,11 +82,11 @@ class SwarmProtocol(AbstractProtocol):
         return None
     
     @bindfrom("connected_callback")
-    def peer_connected(self, nodeid):
+    def peer_connected(self, nodeid, peer: Peer):
         # print("NEW PEER")
         loop = asyncio.get_running_loop()
         
-        peer: Peer = self._lower_get_peer(nodeid)
+        
         msg = bytearray([SwarmProtocol.INTRODUCTION])
         msg = msg + int(self.rank).to_bytes(4,byteorder="big") + self.peer.id_node
         loop.create_task(self.sendto(msg, peer.addr))
@@ -147,10 +147,13 @@ class SwarmProtocol(AbstractProtocol):
         del self.buffer_in[seq_id]
         del self.buffer_out[seq_id]     
         return
+    @bindto("get_peers")
+    def get_peers(self):
+        return None
     async def start(self, p: Peer):
         await super().start(p)
         
-        for _,p in self.bootstrap_peers:
+        for _,p in self.get_peers():
             # print("introducing to ",p.addr)
             msg = bytearray([SwarmProtocol.INTRODUCTION])
             msg = msg  + int(self.rank).to_bytes(4,byteorder="big") + self.peer.id_node

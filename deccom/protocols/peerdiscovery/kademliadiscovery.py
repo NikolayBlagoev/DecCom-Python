@@ -82,6 +82,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
     def remove_peer(self, addr: tuple[str, int], node_id: bytes):
         if  self.bucket_manager.get_peer(node_id) == None:
             return
+        del self.peers[node_id]
         print(self.peer.pub_key, "removing peer.", self.bucket_manager.get_peer(node_id).pub_key)
         self.bucket_manager.remove_peer(node_id)
         return super().remove_peer(addr, node_id)
@@ -235,6 +236,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 del self.searches[self.peer_crawls[p.id_node][1]]
                 del self.peer_crawls[p.id_node]
         self.bucket_manager.update_peer(p.id_node,p)
+        self.peers[p.id_node] = p
         super().add_peer(addr, p)
     async def _async_add(self,addr,p):
         return self.successful_add(addr,p)
