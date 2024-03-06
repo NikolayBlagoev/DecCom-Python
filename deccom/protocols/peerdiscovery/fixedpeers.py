@@ -9,6 +9,7 @@ from deccom.protocols.peerdiscovery.abstractpeerdiscovery import AbstractPeerDis
 
 
 class FixedPeers(AbstractPeerDiscovery):
+    EMPTY = int.from_bytes(b'\x00', byteorder="big")
     offers = dict(AbstractPeerDiscovery.offers, **{
         "sendto_id": "sendto_id",
         "broadcast": "broadcast",
@@ -18,19 +19,48 @@ class FixedPeers(AbstractPeerDiscovery):
         super().__init__(bootstrap_peers, interval, submodule, callback, disconnected_callback, connected_callback)
         self.p_to_a: dict[bytes,tuple[str,int]] = dict()
         self.a_to_p: dict[tuple[str,int],Peer] = dict()
+        self.peer_crawls = dict()
+        self.sent_finds = dict()
         for p in peer_list:
             self.p_to_a[p.id_node] = p.addr
             self.a_to_p[p.addr] = p
             self.peers[p.id_node] = p
-    
+        self.introduced = []
+    async def start(self):
+        await super().start()
+        loop = asyncio.get_running_loop()
+        loop.call_later(2, self.introduce_to_others)
+    def introduce_to_others(self):
+        loop = asyncio.get_running_loop()
+        for a in self.a_to_p:
+            # self.introduced.append(a)
+            loop.create_task(self.introduction(a))
+    async def introduction(self, addr):
+        msg = bytearray([1])
+        print("introducing to ",addr)
+        await self._lower_sendto(msg, addr)
     def process_datagram(self, addr: tuple[str, int], data: bytes):
+        print("ey yo",addr)
         if self.a_to_p.get(addr) == None:
             return
-        super().process_datagram(addr, data)
+        if not addr in self.introduced:
+            print("new peer MET!",addr)
+            self.introduced.append(addr)
+            
+            if self.peer_crawls.get(self.a_to_p.get(addr)) != None:
+                self.peer_crawls.get(self.a_to_p.get(addr)).set_result(True)
+            else:
+                self.connected_callback(self.a_to_p[addr])
+        if data[0] == FixedPeers.EMPTY:
+            super().process_datagram(addr, data[1:])
     async def sendto(self, msg, addr):
         if self.a_to_p.get(addr) == None:
+            print("dont know this peer?")
+
             return
-        await super().sendto(msg, addr)
+        tmp = bytearray([FixedPeers.EMPTY])
+        tmp += msg
+        await super().sendto(tmp, addr)
 
     async def sendto_id(self, msg, p: bytes):
         if self.p_to_a.get(p) == None:
@@ -41,4 +71,15 @@ class FixedPeers(AbstractPeerDiscovery):
             await self.sendto(msg,addr)
     def get_al(self, addr: tuple[str, int]) -> Union[Peer, None]:
         return self.a_to_p.get(addr)
-    
+    async def find_peer(self, id: bytes) -> Peer:
+        if self.peers.get(id) == None:
+            if self.peer_crawls.get(id) == None:
+                loop = asyncio.get_running_loop()
+                fut = loop.create_future()
+                self.peer_crawls[id] = fut
+                
+                await fut
+            else:
+                await self.peer_crawls.get(id)
+        return self.get_peer(id)
+        

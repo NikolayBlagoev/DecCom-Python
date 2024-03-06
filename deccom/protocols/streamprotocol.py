@@ -80,7 +80,7 @@ class StreamProtocol(AbstractProtocol):
         return
     
     @bindto("get_peer")
-    def _lower_get_peer(self, id) -> Union[Peer,None]:
+    def get_peer(self, id) -> Union[Peer,None]:
         return None
     
     @bindfrom("connected_callback")

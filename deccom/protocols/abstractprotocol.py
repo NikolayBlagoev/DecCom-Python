@@ -84,16 +84,16 @@ class AbstractProtocol(object):
         
     
     @bindfrom("callback")    
-    def process_datagram(self,addr:tuple[str,int],data:bytes):
+    def process_datagram(self, addr:tuple[str,int],data:bytes):
         self.callback(addr,data)
         return
     
     @bindto("sendto")
-    async def _lower_sendto(msg:bytes, addr:tuple[str,int]):
+    async def _lower_sendto(self, msg:bytes, addr:tuple[str,int]):
         return
     
     @bindto("start")
-    async def _lower_start():
+    async def _lower_start(self):
         return
         
     async def start(self):

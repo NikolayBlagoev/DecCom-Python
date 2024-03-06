@@ -4,7 +4,7 @@ import asyncio
 from deccom.cryptofuncs.hash import SHA256
 from deccom.nodes import StreamNode
 from deccom.protocols.defaultprotocol import DefaultProtocol
-from deccom.protocols.peerdiscovery.gossipdiscovery import GossipProtocol
+from deccom.protocols.peerdiscovery import KademliaDiscovery
 from deccom.peers import Peer
 from deccom.protocols.streamprotocol import StreamProtocol
 from trainingnode import TrainingNode
@@ -85,7 +85,7 @@ class Pipe2(nn.Module):
 
 
 protocol = DefaultProtocol()
-gossip = GossipProtocol([])
+gossip = KademliaDiscovery([])
 gossip.set_lower(protocol)
 stream = StreamProtocol(False)
 stream.set_lower(gossip)
@@ -95,15 +95,15 @@ if argv[1] == "0" or argv[1] == "3":
     tokenizer, leng = build_tokenizer()
     train_loader = get_glue_qqp_train_data_loader(tokenizer)
     if argv[1]!="0":
-        gossip.peers[n.id_node] = n
+        gossip.bootstrap_peers.append(n)
     net = GPTStageFirst(1024,tokenizer.vocab_size, 2, "cpu")
 elif argv[1] == "1" or argv[1] == "4":
-    gossip.peers[n.id_node] = n
+    gossip.bootstrap_peers.append(n)
     tokenizer, leng = build_tokenizer()
     net = GPTStageMiddle(1024, -1, 2, "cpu")
     
 elif argv[1] == "2" or argv[1] == "5":
-    gossip.peers[n.id_node] = n
+    gossip.bootstrap_peers.append(n)
     tokenizer, leng = build_tokenizer()
     net = GPTStageLast(1024, tokenizer.vocab_size, 2, "cpu")
 

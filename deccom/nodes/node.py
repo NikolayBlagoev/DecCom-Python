@@ -151,6 +151,7 @@ class Node(object):
         self.peers: dict[bytes,tuple[str,int]] = dict()
         print(f"Node listening on {ip_addr}:{port}")
         self.protocol_type = protocol
+        protocol.callback = call_back
         pass
 
     async def listen(self):

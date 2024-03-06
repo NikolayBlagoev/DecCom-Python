@@ -25,15 +25,19 @@ class DefaultProtocol(asyncio.DatagramProtocol):
     def datagram_received(self, data, addr):
         
         # print("from:", addr, "data", data)
+        loop = asyncio.get_event_loop()
         if len(data) < 2:
             print("invalid msg received")
             return
         if data[0] == DefaultProtocol.PING:
-            self.handle_ping(addr, data[1:])
+            loop.create_task(self.handle_ping(addr, data[1:]))
         elif data[0] == DefaultProtocol.PONG:
-            self.handle_pong(addr,data[1:])
+            loop.create_task(self.handle_pong(addr,data[1:]))
         else:
-            self.callback(addr,data[1:])
+            loop.create_task(self.call_callback(addr,data[1:]))
+    async def call_callback(self, addr,data):
+        self.callback(addr,data)
+
     async def start(self):
         return
     def timeout(self, addr, error, msg_id):
@@ -58,14 +62,14 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         
         return
 
-    def handle_ping(self, addr, data):
+    async def handle_ping(self, addr, data):
         trmp = bytearray([DefaultProtocol.PONG])
         trmp = trmp + data
         self.transport.sendto(trmp, addr=addr)
         # print("sent pong",addr)
         return
 
-    def handle_pong(self, addr, data):
+    async def handle_pong(self, addr, data):
         msg_id = int.from_bytes(data, "big")
         # print("received pong",addr )
         if self.pings.get(msg_id) is None:
@@ -82,7 +86,7 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         return super().connection_lost(exc)
     
     async def sendto(self,msg,addr):
-        print("sending to",addr)
+        # print("sending to",addr)
         trmp = bytearray(b'\x01')
         trmp = trmp + msg
         self.transport.sendto(trmp, addr=addr)

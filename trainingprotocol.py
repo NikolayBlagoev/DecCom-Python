@@ -5,6 +5,7 @@ from deccom.cryptofuncs.hash import SHA256
 from deccom.peers.peer import Peer
 from deccom.protocols.abstractprotocol import AbstractProtocol
 from deccom.protocols.streamprotocol import StreamProtocol
+from deccom.protocols.wrappers import *
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -14,22 +15,20 @@ import asyncio
 class TrainingProtocol(AbstractProtocol):
     offers = dict(AbstractProtocol.offers, **{})
     bindings = dict(AbstractProtocol.bindings, **{
-        "process_data": "set_stream_callback",
-        "_lower_find_peer": "find_peer",
-        "_lower_open_connection": "open_connection",
-        "_lower_send_stream": "send_stream",
-        "_lower_get_peer": "get_peer"
+        
     })
     required_lower = AbstractProtocol.required_lower + \
         ["find_peer", "set_stream_callback",
             "open_connection", "send_stream", "get_peer"]
 
-    def __init__(self, world_size, pipeline_size, rank, net, optimizer, dataloader=None, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = ...):
+    def __init__(self, world_size, pipeline_size, rank, net, optimizer, dataloader=None, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = lambda : ...):
         assert world_size % pipeline_size == 0
         super().__init__(submodule, callback)
         self.world_size = world_size
         self.pipeline_size = pipeline_size
         self.rank = rank
+
+        # dp_group to communicate with
         self.dp_group = []
 
         self.pipeline = rank // pipeline_size
@@ -54,10 +53,10 @@ class TrainingProtocol(AbstractProtocol):
             self.dp_group.append(SHA256(str(dp_member)))
             dp_member = (dp_member + pipeline_size) % world_size
             
-        self._lower_find_peer = lambda: ...
-        self._lower_open_connection = lambda: ...
-        self._lower_send_stream = lambda: ...
-        self._lower_get_peer = lambda: ...
+        # self._lower_find_peer = lambda: ...
+        # self._lower_open_connection = lambda: ...
+        # self._lower_send_stream = lambda: ...
+        # self._lower_get_peer = lambda: ...
         self.net: nn.Module = net
         self.sizes = []
         self.len_sizes = []
@@ -70,6 +69,21 @@ class TrainingProtocol(AbstractProtocol):
         self.prev_grad = None
         self.iter = 0
         print(self.pipeline_rank, self.rank,self.dp_group)
+    
+    @bindto("open_connection")
+    async def _lower_open_connection(self, remote_ip, remote_port, node_id: bytes):
+        return
+    @bindto("send_stream")
+    async def _lower_send_stream(self, node_id, data):
+        return
+    @bindto("get_peer")
+    def _lower_get_peer(self, node_id)->Peer:
+        return None
+    
+    @bindto("find_peer")
+    async def _lower_find_peer(self, id: bytes) -> Peer:
+        return None
+    
     async def start(self):
         await super().start()
         if self.pipeline_rank == 0: 
@@ -102,10 +116,10 @@ class TrainingProtocol(AbstractProtocol):
         for i, param in enumerate(self.net.parameters()):
             param.data = param.data - 0.01*tmp[i].view(self.sizes[i])
         self.aggregation = []
-
+    @bindfrom("set_stream_callback")
     def process_data(self, data:bytes, nodeid, addr):
         seq_id = bytes(data[0:8])
-        # print("\n\n\n",seq_id,"\n\n\n")
+        
         data=pickle.loads(data[8:])
         peer: Peer = self._lower_get_peer(nodeid)
         if nodeid == self.prev:

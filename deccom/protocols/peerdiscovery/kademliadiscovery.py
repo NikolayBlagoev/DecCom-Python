@@ -35,7 +35,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
             msg = bytearray([KademliaDiscovery.ASK_FOR_ID])
             await self._lower_sendto(msg,p.addr)
         loop = asyncio.get_event_loop()
-        loop.call_later(2, self.refresh_table)
+        loop.call_later(self.interval+2, self.refresh_table)
     
     def refresh_table(self):
         
@@ -46,6 +46,13 @@ class KademliaDiscovery(AbstractPeerDiscovery):
     async def _refresh_table(self):
         print("refreshing")
         loop = asyncio.get_running_loop()
+        if len(self.bucket_manager.buckets) == 1 and len(self.bucket_manager.buckets[0].peers) == 0:
+            for p in self.bootstrap_peers:
+                await self.introduce_to_peer(p)
+                msg = bytearray([KademliaDiscovery.ASK_FOR_ID])
+                await self._lower_sendto(msg,p.addr)
+                self.refresh_loop = loop.call_later(self.interval+2, self.refresh_table)
+                return
         rand_ids = [Peer.me.id_node]
         unique_id = os.urandom(8)
         while self.searches.get(unique_id) != None:
