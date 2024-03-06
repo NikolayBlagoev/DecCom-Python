@@ -111,10 +111,10 @@ optimizer = optim.SGD(net.parameters(), lr=learning_rate,
                       momentum=momentum)
 training = TrainingProtocol(3,3,int(argv[1]),net,optimizer,train_loader)
 training.set_lower(stream)
-me = TrainingNode(training,"127.0.0.1", 10015 if argv[1] == "0" else None)
+peer = Peer(None, None, pub_key=argv[1])
+me = TrainingNode(peer, training,"127.0.0.1", 10015 if argv[1] == "0" else None)
 print( "TCP", me.tcp_port)
-self.peer = Peer((me.ip_addr,me.port), tcp=me.tcp_port, pub_key=argv[1])
-print(self.peer.id_node)
+print(peer.id_node)
 loop = asyncio.new_event_loop()
 print("run...")
 

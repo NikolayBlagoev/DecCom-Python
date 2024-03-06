@@ -8,13 +8,12 @@ from deccom.protocols.streamprotocol import StreamProtocol
 from deccom.cryptofuncs import SHA256
 class StreamNode(Node):
     def __init__(self, p: Peer, protocol: StreamProtocol, ip_addr="0.0.0.0", port=None, tcp_port = None, call_back: Callable[[tuple[str, int], bytes], None] = lambda addr, data: print(addr, data)) -> None:
-        super().__init__(protocol, ip_addr, port, call_back)
+        super().__init__(p, protocol, ip_addr, port, call_back)
         if tcp_port == None:
             tcp_port = find_open_port()
         self.protocol_type = protocol
         self.tcp_port = tcp_port
-        self.peer = p
-        self.peer.addr = (self.ip_addr, self.port)
+        p.tcp = tcp_port
         # print("tcp_port", tcp_port)
         self.peer_reads = dict()
         self.peer_writes = dict()
