@@ -62,4 +62,4 @@ class AbstractPeerDiscovery(AbstractProtocol):
         return self.peers
     
     async def find_peer(self, id: bytes) -> Peer:
-        return None
+        return self.get_peer(id)

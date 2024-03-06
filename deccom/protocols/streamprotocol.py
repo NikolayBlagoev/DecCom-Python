@@ -101,7 +101,7 @@ class StreamProtocol(AbstractProtocol):
             print("OPENING TO SELF???")
             return
         if remote_port == None:
-        	return None
+            return None
         if self.connections.get(node_id) != None:
             # print("duplicate connection OPENED")
             

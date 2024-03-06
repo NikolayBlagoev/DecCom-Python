@@ -247,7 +247,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         return
 
     async def find_peer(self, id) -> Peer:
-        if self.peers.get(id) == None:
+        if self.get_peer(id) == None:
             if self.peer_crawls.get(id) == None:
                 loop = asyncio.get_running_loop()
                 fut = loop.create_future()

@@ -109,7 +109,7 @@ elif argv[1] == "2" or argv[1] == "5":
 
 optimizer = optim.SGD(net.parameters(), lr=learning_rate,
                       momentum=momentum)
-training = TrainingProtocol(6,3,int(argv[1]),net,optimizer,train_loader)
+training = TrainingProtocol(3,3,int(argv[1]),net,optimizer,train_loader)
 training.set_lower(stream)
 me = TrainingNode(training,"127.0.0.1", 10015 if argv[1] == "0" else None)
 print( "TCP", me.tcp_port)

@@ -7,6 +7,7 @@ from deccom.protocols.abstractprotocol import AbstractProtocol
 from deccom.protocols.streamprotocol import StreamProtocol
 from deccom.protocols.wrappers import *
 import torch.nn as nn
+from torch import zeros_like
 import torch.nn.functional as F
 import torch.optim as optim
 from torch import tensor, mean, stack, cat, split
@@ -91,6 +92,7 @@ class TrainingProtocol(AbstractProtocol):
                     batch_idx, ret = next(self.dataloader)
                     data = ret['text']
                     target = ret['text']
+                    print(data.shape, target.shape)
             except StopIteration :
                     print("TRAINING COMPLETE")
                     return
@@ -118,7 +120,7 @@ class TrainingProtocol(AbstractProtocol):
         for i, param in enumerate(self.net.parameters()):
             param.data = param.data - 0.01*tmp[i].view(self.sizes[i])
         self.aggregation = []
-    @bindfrom("st")
+    @bindfrom("stream_callback")
     def process_data(self, data:bytes, nodeid, addr):
         seq_id = bytes(data[0:8])
         
@@ -126,7 +128,8 @@ class TrainingProtocol(AbstractProtocol):
         peer: Peer = self._lower_get_peer(nodeid)
         if nodeid == self.prev:
             if self.pipeline_rank == 0:
-                loss = self.net.task_layer(data,self.buffer_in.get(seq_id)[0])
+                loss = self.net.task_layer(data,self.buffer_in.get(seq_id))
+                
                 loss.backward()
                 if self.iter % 100 == 0:
                     print(loss.item())
@@ -150,7 +153,11 @@ class TrainingProtocol(AbstractProtocol):
                 tmp = []
                 self.len_sizes = []
                 for param in self.net.parameters():
-                    tmp.append(param.grad.view(-1))
+                    if param.grad == None:
+                        tmp.append(zeros_like(param.view(-1)))
+                    else:
+                        tmp.append(param.grad.view(-1))
+                    
                     self.len_sizes.append(len(tmp[-1]))
                 loop = asyncio.get_running_loop()
                 self.prev_grad = cat(tmp)
@@ -160,10 +167,10 @@ class TrainingProtocol(AbstractProtocol):
                     loop.create_task(self.send_stream(peer,pickle.dumps(self.prev_grad),seqdata=seq_id))
                     
                 self.aggregation.append(self.prev_grad)
-                # print("calculating\n\n\n\n",len(self.dp_group))
+                print("calculating\n\n\n\n",len(self.dp_group))
                 if len(self.aggregation) == len(self.dp_group):
                     self._apply_grad()
-                    # print("\n\n\n\ncalculated")
+                    print("\n\n\n\ncalculated")
                     try:
                         batch_idx, ret = next(self.dataloader)
                         data = ret['text']
