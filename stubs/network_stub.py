@@ -60,6 +60,7 @@ class NetworkStub():
     async def start(self):
         return
     def timeout(self, addr, error, msg_id):
+        print("timed out")
         if self.pings.get(msg_id) is None:
             return
         del self.pings[msg_id]
@@ -71,8 +72,8 @@ class NetworkStub():
         while self.pings.get(msg_id) != None:
             bts = os.urandom(4)
             msg_id = int.from_bytes(bts, "big")
-        # print("sending ping",addr)
-        timeout = loop.call_later(dt+2,
+        print("sending ping",addr,dt)
+        timeout = loop.call_later(dt,
                                       self.timeout, addr,error,msg_id)
         self.pings[msg_id] = (success, timeout)
         trmp = bytearray([NetworkStub.PING])

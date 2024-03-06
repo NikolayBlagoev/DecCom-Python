@@ -15,7 +15,7 @@ class NodeStub(object):
         self.ip_addr = ip_addr
         self.call_back = call_back
         self.peers: dict[bytes,tuple[str,int]] = dict()
-        print(f"Node listening on {ip_addr}:{port}")
+        print(f"{peer.pub_key}, Node listening on {ip_addr}:{port}")
         self.protocol_type = protocol
         protocol.callback = call_back
         self.peer = peer

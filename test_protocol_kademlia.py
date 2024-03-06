@@ -7,8 +7,9 @@ from deccom.protocols.peerdiscovery.kademliadiscovery import KademliaDiscovery
 from stubs.network_stub import NetworkStub
 from stubs.node_stub import NodeStub
 
-class test_protocol_kademlia(unittest.TestCase):
+class test_protocol_kademlia(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        NetworkStub.connections = {}
         self.p1 = Peer(None, pub_key=str(0))
         self.loop = asyncio.new_event_loop()
         pl = NetworkStub()
@@ -52,8 +53,10 @@ class test_protocol_kademlia(unittest.TestCase):
             for p in prlist:
                 self.loop.run_until_complete(k.find_peer(bytes(p.id_node)))
                 self.assertEqual(p.id_node, k.get_peer(bytes(p.id_node)).id_node)
-
-    def test_ensure_not_central(self):
+    def doCleanups(self) -> None:
+        self.n1.set_listen(False)
+        return super().doCleanups()
+    async def test_ensure_not_central(self):
         
         prlist = []
         kls = []
@@ -67,70 +70,85 @@ class test_protocol_kademlia(unittest.TestCase):
             k2.set_lower(pl)
             kls.append(k2)
             n2 = NodeStub(p2, k2)
-            self.loop.run_until_complete(n2.listen())
-        self.loop.run_until_complete(asyncio.sleep(3))
+            await n2.listen()
+        await asyncio.sleep(3)
         self.n1.set_listen(False)
         for k in kls:
             for p in prlist:
-                # print("do we know?")
-                self.loop.run_until_complete(k.find_peer(bytes(p.id_node)))
+                print("do we know?")
+                await k.find_peer(bytes(p.id_node)) 
                 self.assertEqual(p.id_node, k.get_peer(bytes(p.id_node)).id_node)
         self.n1.set_listen(True)
 
-    def test_small_bucket(self):
+class test_protocol_kademlia_2(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.p1 = Peer(None, pub_key=str(0))
+        self.loop = asyncio.new_event_loop()
+        NetworkStub.connections = {}
+        pl = NetworkStub()
+        kl = KademliaDiscovery()
+        kl.set_lower(pl)
+        self.n1 = NodeStub(self.p1, kl)
+        self.loop.run_until_complete(self.n1.listen())
+    async def test_small_bucket(self):
         
         prlist = []
         kls = []
         
             
 
-        p3= Peer(None, id_node= bytes(bytearray([int.from_bytes(b'\xff', byteorder="big") for _ in range(31)] + [0])), pub_key="10")
-        prlist.append(p3)
+        p1= Peer(None, id_node= bytes(bytearray([int.from_bytes(b'\xff', byteorder="big") for _ in range(31)] + [0])), pub_key="10")
+        prlist.append(p1)
         pl = NetworkStub()
-        k1 = KademliaDiscovery([self.p1], interval=2, k = 1)
+        k1 = KademliaDiscovery([self.p1], interval=3, k = 1)
         k1.set_lower(pl)
         kls.append(k1)
-        n3 = NodeStub(p3, k1)
-        self.loop.run_until_complete(n3.listen())
+        n3 = NodeStub(p1, k1)
+        await n3.listen()
 
         p2 = Peer(None, id_node= bytes(bytearray([int.from_bytes(b'\x00', byteorder="big") for _ in range(32)])), pub_key="00")
         prlist.append(p2)
         pl = NetworkStub()
-        k2 = KademliaDiscovery([self.p1], interval=2)
+        k2 = KademliaDiscovery([self.p1], interval=3)
         k2.set_lower(pl)
         kls.append(k2)
         n2 = NodeStub(p2, k2)
-        self.loop.run_until_complete(n2.listen())
-        self.loop.run_until_complete(asyncio.sleep(5))
+        await n2.listen()
+        await asyncio.sleep(5)
         
-        self.loop.run_until_complete(k2.find_peer(bytes(p3.id_node)))
-        self.assertEqual(p3.id_node, k2.get_peer(bytes(p3.id_node)).id_node)
+        await k2.find_peer(bytes(p1.id_node))
+        self.assertEqual(p1.id_node, k2.get_peer(bytes(p1.id_node)).id_node)
         
 
         p3 = Peer(None, id_node= bytes(bytearray([int.from_bytes(b'\xff', byteorder="big") for _ in range(32)])), pub_key="1")
         prlist.append(p3)
         pl = NetworkStub()
-        k3 = KademliaDiscovery([self.p1], interval=2)
+        k3 = KademliaDiscovery([self.p1], interval=3)
         k3.set_lower(pl)
         kls.append(k3)
         n2 = NodeStub(p3, k3)
-        self.loop.run_until_complete(n2.listen())
-        self.loop.run_until_complete(asyncio.sleep(5))
+        await n2.listen()
+        await asyncio.sleep(5)
 
-        self.loop.run_until_complete(k1.find_peer(bytes(p3.id_node)))
+        await k1.find_peer(bytes(p3.id_node))
         
         self.assertEqual(p3.id_node, k1.get_peer(bytes(p3.id_node)).id_node)
 
-        self.loop.run_until_complete(k3.find_peer(bytes(p2.id_node)))
+        await k3.find_peer(bytes(p2.id_node))
         
         self.assertEqual(p2.id_node, k3.get_peer(bytes(p2.id_node)).id_node)
-        n3.set_listen(False)
+
+        
+        
+        
+        self.n1.set_listen(False)
         print("lookin...")
-        self.loop.run_until_complete(asyncio.sleep(10))
-        self.loop.run_until_complete(k1.find_peer(bytes(p2.id_node)))
+        await asyncio.sleep(5)
+        print("digging in...", p2.id_node)
+        await k1.find_peer(bytes(p2.id_node))
         
         self.assertEqual(p2.id_node, k1.get_peer(bytes(p2.id_node)).id_node)
-        n3.set_listen(True)
+        self.n1.set_listen(True)
         # self.loop.run_until_complete(asyncio.sleep(3))
         # n3.set_listen(False)
         # for k in kls:

@@ -61,7 +61,7 @@ class KBucket(object):
             if len(self.toadd) > 0:
                 
                 dist,peer = self.toadd.pop()
-                # self.success_call(dist, peer)
+                self.success_call(dist, peer)
                 self.peers[dist] = peer
 
     def get_peer(self, dist):
@@ -130,12 +130,17 @@ class BucketManager(object):
    
     
     def add_peer(self,id,node, lv=0):
+        if self.get_peer(id) != None:
+            return None
         if isinstance(id, bytearray):
             id = bytes(id)
         # print(lv)
         if isinstance(id, bytes):
             id = int.from_bytes(id, byteorder="big")
         dist = self.id ^ id
+        if dist == 0:
+            print("added self")
+            return
         indx = self._get_index(dist)
         
         ret = self.buckets[indx].add_peer(dist,node)
@@ -180,15 +185,23 @@ class BucketManager(object):
         diff = 1
         idx += diff
         stopper = max(idx, len(self.buckets)-idx)
+        # print("stopper", idx, len(self.buckets), stopper, len(lst), alpha)
+        # acc = 0
+        # for b in self.buckets:
+        #     acc += len(b.peers)
+        # print("we know",acc)
+
         while len(lst) < alpha:
-            if idx >= 0 and idx < len(self.buckets):
-                lst += list(self.buckets[idx].peers.values())
+            
+            if idx + diff >= 0 and idx + diff < len(self.buckets):
+                lst += list(self.buckets[idx + diff].peers.values())
             if diff < 0:
                 diff *= -1
                 diff += 1
             else:
                 diff *= -1
-            if abs(diff) > stopper:
+            
+            if abs(diff) > stopper + 1:
                 break
         lst = lst[:alpha]    
         return lst
