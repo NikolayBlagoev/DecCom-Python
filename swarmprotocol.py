@@ -28,13 +28,13 @@ class SwarmProtocol(AbstractProtocol):
         "_lower_open_connection": "open_connection",
         "_lower_send_stream": "send_stream",
         "_lower_get_peer": "get_peer",
-        "peer_connected": "set_connected_callback",
+        "peer_connected": "connected_callback",
         "_lower_get_peers": "get_peers",
-        "peer_disconnected": "set_disconnect_callback"
+        "peer_disconnected": "disconnected_callback"
     })
     required_lower = AbstractProtocol.required_lower + \
         ["find_peer", "set_stream_callback",
-            "open_connection", "send_stream", "get_peer", "get_peers", "connected_callback","disconnect_callback"]
+            "open_connection", "send_stream", "get_peer", "get_peers", "connected_callback","disconnected_callback"]
     INTRODUCTION = int.from_bytes(b'\xd1', byteorder="big")
     COMPLETE = int.from_bytes(b'\xd8', byteorder="big")
     
@@ -178,7 +178,7 @@ class SwarmProtocol(AbstractProtocol):
             ret = SwarmProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
             ret.retain_grad()
             await self.send_forward(new_seq_id,target, ret)
-    @bindfrom("disconnect_callback")
+    @bindfrom("disconnected_callback")
     def peer_disconnected(self,addr, node_id):
         if node_id in self.same_stage:
             self.same_stage.remove(node_id)
