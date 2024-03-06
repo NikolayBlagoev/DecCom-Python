@@ -1,3 +1,4 @@
+from deccom.protocols.peerdiscovery.kademliadiscovery import KademliaDiscovery
 from gpt_distributed import GPTStageFirst, GPTStageLast, GPTStageMiddle
 from sys import argv
 import asyncio
@@ -87,7 +88,7 @@ class Pipe2(nn.Module):
 
 
 protocol = DefaultProtocol()
-gossip = GossipProtocol([])
+gossip = KademliaDiscovery([])
 gossip.set_lower(protocol)
 stream = StreamProtocol(False)
 stream.set_lower(gossip)
@@ -115,10 +116,9 @@ optimizer = optim.SGD(net.parameters(), lr=learning_rate,
                       momentum=momentum)
 training = SwarmProtocol(int(argv[1]) % 3,net,optimizer,enumerate(train_loader))
 training.set_lower(stream)
-me = TrainingNode(training,"127.0.0.1", 10015 if argv[1] == "0" else None)
+me = TrainingNode( Peer(None, pub_key=argv[1]), training,"127.0.0.1", 10015 if argv[1] == "0" else None)
 print( "TCP", me.tcp_port)
-self.peer = Peer((me.ip_addr,me.port), tcp=me.tcp_port, pub_key=argv[1])
-print(self.peer.pub_key,self.peer.id_node)
+
 loop = asyncio.new_event_loop()
 print("run...")
 
