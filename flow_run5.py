@@ -59,13 +59,13 @@ def costmap(a1, a2):
     return matrix[a1][a2]
 
 peers = [Peer(("127.0.0.1", 10026), "6"), Peer(("127.0.0.1", 10021), "1"), Peer(("127.0.0.1", 10022), "2"), Peer(("127.0.0.1", 10024), "4")]
-self.peer = Peer(("127.0.0.1", 10023), "3")
+peer = Peer(("127.0.0.1", 10023), "3")
 lowest = DefaultProtocol()
 prs = FixedPeers(peers)
 prs.set_lower(lowest)
-fp = FlowProtocol(2, 3, 1, 0, 0, 0, costmap)
+fp = FlowProtocol(2, 3, 2, 0, 0, 0, costmap)
 fp.set_lower(prs)
-me = Node(fp,"127.0.0.1",10023, print)
+me = Node(peer,fp,"127.0.0.1",10023, print)
 loop = asyncio.new_event_loop()
 loop.run_until_complete(me.listen())
 loop.run_forever()

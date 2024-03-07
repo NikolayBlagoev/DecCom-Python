@@ -357,7 +357,7 @@ class SwarmProtocol(AbstractProtocol):
         await self._lower_open_connection(p.addr[0], p.tcp, p.id_node)
         to_send = bytearray(seqdata)
         to_send += stage + data
-        await self._lower_send_stream(node_id, to_send)
+        await self.send_stream(node_id, to_send)
         return
     def get_lowest_stream(self):
         submodule = self.submodule
