@@ -94,7 +94,7 @@ def costmap(pk1, pk2):
         # print(loc1,loc2)
     return (ret[0] / 1e3 + send_gradient_size * 8 / (ret[1] * partition_size))/100
 ret = (10, 1.02)
-print(3 * (ret[0] / 1e3 + send_gradient_size * 8 / (ret[1] * partition_size)))
+print(7 * (ret[0] / 1e3 + send_gradient_size * 8 / (ret[1] * partition_size)))
 me = int(argv[1])
 import numpy as np
 np.random.seed(239)

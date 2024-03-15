@@ -58,10 +58,11 @@ class Arpegio(AbstractProtocol):
             if self.stage_peers.get(pid) != None:
                 currstage = self.stage_peers.get(pid)
                 self.per_stage[currstage].remove(self.peers[pid])
-            self.stage_peers[pid] = stage
+            
             if self.per_stage.get(stage) == None:
                 self.per_stage[stage] = []
             p = await self.find_peer(pid)
+            self.stage_peers[pid] = stage
             pobj = StagePeer(p, stage)
             self.per_stage[stage].append(pobj)
             self.peers[pid] = pobj
