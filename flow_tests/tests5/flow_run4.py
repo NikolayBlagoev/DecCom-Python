@@ -6,7 +6,6 @@ from flowprotocol import FlowProtocol
 from deccom.nodes import Node
 
 
-
 def costmap(a1, a2):
     matrix = {
         "0": {
@@ -59,14 +58,15 @@ def costmap(a1, a2):
         },
     }
     return matrix[a1][a2]
-peers = [Peer(("127.0.0.1", 10020), "0"), Peer(("127.0.0.1", 10023), "3"), Peer(("127.0.0.1", 10024), "9"), Peer(("127.0.0.1", 10022), "2")]
-peer = Peer(("127.0.0.1", 10021), "1")
+
+peers = [Peer(("127.0.0.1", 10026), "6"), Peer(("127.0.0.1", 10021), "1"), Peer(("127.0.0.1", 10022), "2"), Peer(("127.0.0.1", 10023), "3")]
+peer = Peer(("127.0.0.1", 10024), "9")
 lowest = DefaultProtocol()
 prs = FixedPeers(peers)
 prs.set_lower(lowest)
-fp = FlowProtocol(1, 3, 2, 0, 0, 0, costmap)
+fp = FlowProtocol(2, 3, 2, 0, 0, 0, costmap)
 fp.set_lower(prs)
-me = Node(peer, fp,"127.0.0.1",10021, print)
+me = Node(peer, fp,"127.0.0.1",10024, print)
 loop = asyncio.new_event_loop()
 loop.run_until_complete(me.listen())
 loop.run_forever()

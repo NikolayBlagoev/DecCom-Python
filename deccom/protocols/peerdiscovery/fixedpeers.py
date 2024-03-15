@@ -10,12 +10,13 @@ from deccom.protocols.peerdiscovery.abstractpeerdiscovery import AbstractPeerDis
 
 class FixedPeers(AbstractPeerDiscovery):
     EMPTY = int.from_bytes(b'\x00', byteorder="big")
+    EXIT = int.from_bytes(b'\x02', byteorder="big")
     offers = dict(AbstractPeerDiscovery.offers, **{
         "sendto_id": "sendto_id",
         "broadcast": "broadcast",
         "get_al": "get_al"
     })
-    def __init__(self, peer_list: list[Peer], bootstrap_peers: list[Peer] = [], interval: int = 10, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = None, disconnected_callback=..., connected_callback: Callable[[Peer], None] = ...):
+    def __init__(self, peer_list: list[Peer], bootstrap_peers: list[Peer] = [], interval: int = 10, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = None, disconnected_callback= lambda *args: ..., connected_callback: Callable[[Peer], None] = lambda *args: ...):
         super().__init__(bootstrap_peers, interval, submodule, callback, disconnected_callback, connected_callback)
         self.p_to_a: dict[bytes,tuple[str,int]] = dict()
         self.a_to_p: dict[tuple[str,int],Peer] = dict()
@@ -41,7 +42,7 @@ class FixedPeers(AbstractPeerDiscovery):
         print("introducing to ",addr)
         await self._lower_sendto(msg, addr)
     def process_datagram(self, addr: tuple[str, int], data: bytes):
-        print("ey yo",addr)
+        
         if self.a_to_p.get(addr) == None:
             return
         if not addr in self.introduced:
@@ -54,18 +55,29 @@ class FixedPeers(AbstractPeerDiscovery):
                 self.connected_callback(self.a_to_p[addr])
         if data[0] == FixedPeers.EMPTY:
             super().process_datagram(addr, data[1:])
+        elif data[0] == FixedPeers.EXIT:
+            
+            p = self.a_to_p[addr]
+            print("\n\n\n\nsomeone is gone?", p.pub_key)
+            del self.a_to_p[addr]
+            self.remove_peer(addr, p.id_node)
     async def sendto(self, msg, addr):
         if self.a_to_p.get(addr) == None:
             print("dont know this peer?")
 
             return
+        if msg[0] == int.from_bytes(b'\xc4', byteorder="big"):
+            print("sending push back!")
         tmp = bytearray([FixedPeers.EMPTY])
         tmp += msg
         await super().sendto(tmp, addr)
-
+    async def stop_receiving(self):
+        self.a_to_p = dict()
     async def sendto_id(self, msg, p: bytes):
         if self.p_to_a.get(p) == None:
             return
+        if msg[0] == FixedPeers.EXIT:
+            print("sending exit to ", self.peers[p].pub_key)
         await super().sendto(msg, self.p_to_a[p])
     async def broadcast(self, msg):
         for addr, p in self.a_to_p.items():

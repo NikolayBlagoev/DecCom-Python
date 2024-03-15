@@ -1,0 +1,1 @@
+optimal flow (after crash) is 2 at cost of 6

@@ -65,6 +65,9 @@ class KademliaDiscovery(AbstractPeerDiscovery):
             rand_ids.append(r1)
         if self.warmup < 7:
             rand_ids = rand_ids[:1]
+            other = int.from_bytes(self.peer.id_node,byteorder="big") ^ int.from_bytes(bytes(bytearray([int.from_bytes(b'\xff', byteorder="big") for _ in range(32)])), byteorder="big")
+
+            rand_ids.append(other.to_bytes(32, byteorder="big"))
             # self.warmup += 1
         for ids in rand_ids:
             l = self.bucket_manager.get_closest(ids,1)
@@ -139,7 +142,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 self.send_find_response(addr,[self.get_peer(id)],unique_id)
             else:
                 
-                closest_peers = self.bucket_manager.get_closest(id,alpha=3)
+                closest_peers = self.bucket_manager.get_closest(id,alpha = 5)
                 if len(closest_peers) == 0:
                     print("oops dont know anyone :/")
                     return
@@ -185,7 +188,9 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                     
             if self.warmup < 7:
                         loop = asyncio.get_running_loop()
-                        ret = self.bucket_manager.get_closest(self.peer.id_node, 1)
+                        other = int.from_bytes(self.peer.id_node,byteorder="big") ^ int.from_bytes(bytes(bytearray([int.from_bytes(b'\xff', byteorder="big") for _ in range(32)])), byteorder="big")
+
+                        ret = self.bucket_manager.get_closest(other.to_bytes(32, byteorder="big"), 1)
 
                         if len(ret) > 0:
                             loop.create_task(self.send_find(unique_id,ret[0], True))

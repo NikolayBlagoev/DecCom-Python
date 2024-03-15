@@ -1,0 +1,1 @@
+optimal flow is 4 at cost of 18
