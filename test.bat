@@ -3,7 +3,7 @@ Set COUNTER=1
 
 
 echo %Counter%
-if "%Counter%"=="32" (
+if "%Counter%"=="24" (
     echo "END!"
 ) else (
     start cmd.exe /c "python testarpegio.py %Counter%"

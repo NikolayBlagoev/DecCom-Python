@@ -3,7 +3,7 @@ import random
 from sys import argv
 import time
 import unittest
-from arpegio2 import Arpegio
+from arpegio import Arpegio
 from deccom.nodes.node import Node
 from deccom.peers.peer import byte_reader
 from deccom.peers.peer import Peer
@@ -81,8 +81,8 @@ batch_size = 1e6 / 2048
 partition_size = int(batch_size / batch_size_per_task)
 locs = ["Virginia", "Oregon", "Sydney", "London", "Frankfurt", "Ireland", "Tokyo", "Ohio", "Seoul"]
 def costmap(pk1, pk2):
-    loc1 = locs[int(pk1) % 8]
-    loc2 = locs[int(pk2) % 8]
+    loc1 = locs[int(pk1) % 6]
+    loc2 = locs[int(pk2) % 6]
     ret = delay_bandwidth_dict.get(loc1+"-"+loc2)
     if ret == None:
         ret = delay_bandwidth_dict.get(loc2+"-"+loc1)
@@ -97,11 +97,11 @@ ret = (10, 1.02)
 print(7 * (ret[0] / 1e3 + send_gradient_size * 8 / (ret[1] * partition_size)))
 me = int(argv[1])
 import numpy as np
-np.random.seed(239)
-stgs = np.random.permutation([i % 8 for i in range(32)])
+# np.random.seed(13)
+stgs = np.random.permutation([i % 6 for i in range(24)])
 
 protocol = DefaultProtocol()
-gossip = KademliaDiscovery([])
+gossip = KademliaDiscovery([], k=30)
 if me != 0:
     gossip.bootstrap_peers.append(Peer(("127.0.0.1", 10015),"0"))
 
