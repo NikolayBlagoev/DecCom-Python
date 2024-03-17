@@ -361,7 +361,7 @@ class SwarmProtocol(AbstractProtocol):
             self.next_stage[self.buffer_out[data[1:]][1]].delay = 0.6 * self.next_stage[self.buffer_out[data[1:]][1]].delay + 0.4 * (datetime.now() - self.sent[self.buffer_out[data[1:]][1]][data[1:]]).seconds * 1000
             if self.rank == 0:
                 loop = asyncio.get_event_loop()
-                self.outstanding_batches[data[1:]] = loop.call_later(0, self.dataholder_timeout, data[1:])
+                self.outstanding_batches[data[1:]] = loop.call_later(120, self.dataholder_timeout, data[1:])
             return
         else:
             super().process_datagram(addr, data)

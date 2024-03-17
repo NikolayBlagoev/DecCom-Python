@@ -22,31 +22,20 @@ class PeerClassification:
     
 class FaultProtocol(AbstractProtocol):
     offers = dict(AbstractProtocol.offers, **{})
-    bindings = dict(AbstractProtocol.bindings, **{
-        "process_data": "set_stream_callback",
-        "_lower_find_peer": "find_peer",
-        "_lower_open_connection": "open_connection",
-        "_lower_send_stream": "send_stream",
-        "_lower_get_peer": "get_peer",
-        "peer_connected": "connected_callback",
-        "_lower_get_peers": "get_peers",
-        "peer_disconnected": "disconnected_callback"
-    })
     required_lower = AbstractProtocol.required_lower + \
         ["find_peer", "set_stream_callback",
             "open_connection", "send_stream", "get_peer", "get_peers", "connected_callback","disconnected_callback"]
     INTRODUCTION = int.from_bytes(b'\xd1', byteorder="big")
     COMPLETE = int.from_bytes(b'\xd8', byteorder="big")
-    
-
-    def __init__(self, rank, net, optimizer, dataloader=None, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = ...):
+    BACK_COMPLETE = int.from_bytes(b'\xd7', byteorder="big")
+    ALERT = int.from_bytes(b'\xd6', byteorder="big")
+    PING = int.from_bytes(b'\xd5', byteorder="big")
+    def __init__(self, rank, net, optimizer, dataloader=None, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = lambda *args: ...):
         
         super().__init__(submodule, callback)
-        
+
         self.rank = rank
         self.dataloader = dataloader
-        
-        
         self.net: nn.Module = net
         self.sizes = []
         if self.rank == 0:
@@ -59,6 +48,7 @@ class FaultProtocol(AbstractProtocol):
         self.optimizer = optimizer
         self.buffer_in = dict()
         self.buffer_out = dict()
+        self.paths = dict()
         self.aggregation = []
         self.prev_grad = None
         self.iter = 0
@@ -74,7 +64,7 @@ class FaultProtocol(AbstractProtocol):
     async def _lower_open_connection(self):
         return
     @bindto("send_stream")
-    async def send_stream(self, node_id, data):
+    async def _lower_send_stream(self, node_id, data):
         return
         
     @bindto("get_peer")
@@ -101,12 +91,24 @@ class FaultProtocol(AbstractProtocol):
                 choice = pr
         # print(choice.delay,len(self.next_stage.items()),choice.peerid)
         return choice
-    async def send_forward(self,seq_id, inp, outp, prev_peer = None):
+    async def send_forward(self,seq_id, inp, outp, prev_peer = None, path: list = []):
+        if len(path) < 6:
+            path.append(self.peer.id_node)
+        else:
+            path[self.rank] = self.peer.id_node
+            p: Peer = await self._lower_find_peer(path[self.rank + 1])
+            choice = self.next_stage.get(p.id_node)
+            while choice == None:
+                await asyncio.sleep(2)
+                choice = self.next_stage.get(p.id_node)
+                
+            
+        self.paths[seq_id] = path
         if self.rank % 6 == 5:
             print("looking for", seq_id[0])
             choice = PeerClassification(SHA256(str(seq_id[0])),0)
         else:
-            choice = self.choose_next()
+            choice = self.choose_next() if choice == None else choice
             while choice == None:
                 # print("eeeping....")
                 await asyncio.sleep(3)
@@ -117,14 +119,19 @@ class FaultProtocol(AbstractProtocol):
             self.sent[choice.peerid] = dict()
         self.sent[choice.peerid][seq_id] = datetime.now()
         loop = asyncio.get_running_loop()
-        loop.create_task(self.send_stream(choice.peerid,pickle.dumps(outp),seqdata=seq_id))
+        loop.create_task(self.send_stream(choice.peerid,pickle.dumps(outp),seqdata=seq_id, path = path))
         timeout = loop.call_later(20,
                                       self.timeout, seq_id)
         self.outstanding[seq_id] = timeout
-    def send_back(self, seq_id, data):
-        ret = FaultProtocol.train(self.net, self.optimizer, inp_batch=self.buffer_out.get(seq_id)[0], output=data, rank = self.rank, stage = -1)
+    def _helper_back(self, seq_id, path):
         loop = asyncio.get_running_loop()
-        loop.create_task(self.send_stream(self.buffer_in.get(seq_id)[1],pickle.dumps(self.buffer_in.get(seq_id)[0].grad),seqdata=seq_id))
+        loop.create_task(self.send_stream(self.buffer_in.get(seq_id)[1],pickle.dumps(self.buffer_in.get(seq_id)[0].grad),seqdata=seq_id,path=path))
+        timeout = loop.call_later(20,
+                                      self.back_timeout, seq_id)
+        self.outstanding[seq_id] = timeout
+    def send_back(self, seq_id, data, path):
+        ret = FaultProtocol.train(self.net, self.optimizer, inp_batch=self.buffer_out.get(seq_id)[0], output=data, rank = self.rank, stage = -1)
+        self._helper_back(seq_id, path)
         tmp = []
         
         for param in self.net.parameters():
@@ -140,12 +147,11 @@ class FaultProtocol(AbstractProtocol):
         for peer in self.same_stage:
             if peer == self.peer.id_node:
                 continue
-            loop.create_task(self.send_stream(peer,pickle.dumps(self.prev_grad),seqdata=seq_id)) 
+            loop.create_task(self.send_stream(peer,pickle.dumps(self.prev_grad),seqdata=seq_id, path=path)) 
         if len(self.aggregation) > len(self.same_stage):
                     print("CAN DO BACK", len(self.aggregation), len(self.same_stage))
                     self._apply_grad()  
-        del self.buffer_in[seq_id]
-        del self.buffer_out[seq_id]     
+             
         return
     @bindto("get_peers")
     def get_peers(self):
@@ -211,6 +217,30 @@ class FaultProtocol(AbstractProtocol):
         loop.create_task(
             self.send_forward(seq_id,self.buffer_in[seq_id][0], self.buffer_out[seq_id][0], self.buffer_in[seq_id][1]))
         return
+    def alert_dataholder(self, seq_id):
+        msg = bytearray([FaultProtocol.ALERT])
+        msg += seq_id
+        loop = asyncio.get_event_loop()
+        loop.create_task(self._alert(msg, seq_id))
+    async def _alert(self, msg, seq_id):
+        p: Peer = await self._lower_find_peer(SHA256(seq_id[0]))
+        await self._lower_sendto(msg, p.addr)
+
+    def back_timeout(self,seq_id):
+        print("oops timed out",seq_id)
+        nodeid = self.buffer_in[seq_id][1]
+        # del self.next_stage[nodeid]
+        if self.next_stage.get(nodeid) != None:
+            self.next_stage[nodeid].delay = 8000000
+        
+        self.alert_dataholder()
+    def send_complete_back(self, seq_id, nodeid):
+        loop = asyncio.get_running_loop()
+        
+        peer: Peer = self._lower_get_peer(nodeid)
+        msg = bytearray([FaultProtocol.BACK_COMPLETE])
+        msg = msg +  seq_id
+        loop.create_task(self.sendto(msg, peer.addr))
     def check_for_back(self):
         if len(self.aggregation) > len(self.same_stage):
                 print("CAN DO BACK", len(self.aggregation), len(self.same_stage))
@@ -246,8 +276,15 @@ class FaultProtocol(AbstractProtocol):
     def process_data(self, data:bytes, nodeid, addr):
         seq_id = bytes(data[0:8])
         stage = int.from_bytes(data[8:12],byteorder="big")
+        pth_l = data[12]
+        path = []
+        i = 13
+        for _ in range(pth_l):
+            path.append(data[i: i+32])
+            i += 32
+
         # print("\n\n\n",seq_id,"\n\n\n")
-        data=pickle.loads(data[12:])
+        data=pickle.loads(data[i:])
         peer: Peer = self._lower_get_peer(nodeid)
         if stage == (self.rank + 1)% 6:
             # print("BACKWARDS")
@@ -272,10 +309,12 @@ class FaultProtocol(AbstractProtocol):
                     loop.create_task(self.send_stream(peer,pickle.dumps(self.prev_grad),seqdata=seq_id))
                     
                 self.aggregation.append(self.prev_grad)
+                self.paths[seq_id] = path
                 self.check_for_back()
             else:
                 
-                self.send_back(seq_id,data)
+                self.send_back(seq_id,data, path)
+                self.send_complete_back(seq_id, nodeid)
         elif self.rank == stage:
             self.aggregation.append(data)
             print("collecting...\n\n\n\n")
@@ -294,9 +333,13 @@ class FaultProtocol(AbstractProtocol):
                 if self.iter % 10 == 0:
                     print(loss.item())
                 loop = asyncio.get_running_loop()
-                loop.create_task(self.send_stream(nodeid,pickle.dumps(data.grad),seqdata=seq_id))
+                loop.create_task(self.send_stream(nodeid,pickle.dumps(data.grad),seqdata=seq_id, path=path))
                     
             else:
+                if self.buffer_in.get(seq_id) != None:
+                    self._helper_back(seq_id, path = path)
+                    return
+                    
                 if self.forward_start!= None:
                     print("TIME IT TOOK", (datetime.now() - self.forward_start).seconds)
                 self.forward_start = datetime.now()
@@ -305,7 +348,7 @@ class FaultProtocol(AbstractProtocol):
                 ret.retain_grad()
                 loop = asyncio.get_running_loop()
                 loop.create_task(
-                            self.send_forward(seq_id,data,ret,nodeid))
+                            self.send_forward(seq_id,data,ret,nodeid, path = path))
            
             self.send_complete(seq_id,nodeid)
             # loop.create_task(self.se)  
@@ -324,10 +367,6 @@ class FaultProtocol(AbstractProtocol):
             
             stage = int.from_bytes(data[1:5], byteorder="big")
             nodeid = data[5:]
-            # if self._lower_get_peer(nodeid)!= None:
-            #     print("INTRODUCTION FROM",self._lower_get_peer(nodeid).pub_key)
-            # else:
-            #     print("FAST INTRODUCTION")
             if stage == self.rank:
                 if nodeid not in self.same_stage:
                     self.same_stage.append(nodeid)
@@ -342,13 +381,40 @@ class FaultProtocol(AbstractProtocol):
             del self.outstanding[data[1:]]
             self.next_stage[self.buffer_out[data[1:]][1]].delay = 0.6 * self.next_stage[self.buffer_out[data[1:]][1]].delay + 0.4 * (datetime.now() - self.sent[self.buffer_out[data[1:]][1]][data[1:]]).seconds * 1000
             return
+        elif data[0] == FaultProtocol.BACK_COMPLETE:
+            self.outstanding[data[1:]].cancel()
+            del self.outstanding[data[1:]]
+            del self.buffer_in[data[1:]]
+            del self.buffer_out[data[1:]]
+            return
+        elif data[0] == FaultProtocol.PING:
+            seq_id = data[1:]
+            self.send_complete(seq_id, self.buffer_in[seq_id][1])
+            self.send_ping(seq_id)
+        elif data[0] == FaultProtocol.ALERT:
+            if self.rank != 0:
+                return
+            pth = self.paths.get(data[1:])
+            if pth == None:
+                return
+            self.send_ping(data[1:])
         else:
             super().process_datagram(addr, data)
-        
-    async def send_stream(self, node_id, data, seqdata=b'', stage = None):
+    def send_ping(self, seq_id):
+        nxt = self.buffer_out[seq_id]
+        loop = asyncio.get_event_loop()
+        msg = bytearray([FaultProtocol.PING])
+        msg += seq_id
+        loop.create_task(self._lower_sendto(msg, self._lower_get_peer(self.buffer_out[seq_id][1].addr)))
+        timeout = loop.call_later(20,
+                                      self.timeout, seq_id)
+        self.outstanding[seq_id] = timeout
+    async def send_stream(self, node_id, data, seqdata=b'', stage = None, path = []):
         if stage == None:
             stage = self.rank
         stage = int(stage).to_bytes(4,byteorder="big")
+        pth_len  = int(len(path)).to_bytes(1, byteorder="bg")
+
         # print("SENDING TO")
         p: Peer = await self._lower_find_peer(node_id)
         # print("FOUND PEER SENDING")
@@ -356,8 +422,11 @@ class FaultProtocol(AbstractProtocol):
             print("if seqdata", seqdata)
         await self._lower_open_connection(p.addr[0], p.tcp, p.id_node)
         to_send = bytearray(seqdata)
-        to_send += stage + data
-        await self.send_stream(node_id, to_send)
+        to_send += stage + pth_len
+        for p in path:
+            to_send += p
+        to_send += data
+        await self._lower_send_stream(node_id, to_send)
         return
     def get_lowest_stream(self):
         submodule = self.submodule
