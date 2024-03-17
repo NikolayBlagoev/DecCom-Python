@@ -20,7 +20,7 @@ class PeerClassification:
         pass
     
     
-class SwarmProtocol(AbstractProtocol):
+class FaultProtocol(AbstractProtocol):
     offers = dict(AbstractProtocol.offers, **{})
     bindings = dict(AbstractProtocol.bindings, **{
         "process_data": "set_stream_callback",
@@ -62,7 +62,6 @@ class SwarmProtocol(AbstractProtocol):
         self.aggregation = []
         self.prev_grad = None
         self.iter = 0
-        self.outstanding_batches = dict()
         self.next_stage: dict[bytes,PeerClassification] = dict()
         self.sent: dict[bytes, dict[bytes,datetime]] = dict()
         self.same_stage = []
@@ -88,7 +87,7 @@ class SwarmProtocol(AbstractProtocol):
         loop = asyncio.get_running_loop()
         
         
-        msg = bytearray([SwarmProtocol.INTRODUCTION])
+        msg = bytearray([FaultProtocol.INTRODUCTION])
         msg = msg + int(self.rank).to_bytes(4,byteorder="big") + self.peer.id_node
         loop.create_task(self.sendto(msg, peer.addr))
         return
@@ -102,23 +101,18 @@ class SwarmProtocol(AbstractProtocol):
                 choice = pr
         # print(choice.delay,len(self.next_stage.items()),choice.peerid)
         return choice
-    async def send_forward(self,seq_id, inp, outp, prev_peer = None, resend = False):
+    async def send_forward(self,seq_id, inp, outp, prev_peer = None):
         if self.rank % 6 == 5:
             print("looking for", seq_id[0])
             choice = PeerClassification(SHA256(str(seq_id[0])),0)
         else:
-            
             choice = self.choose_next()
-            if resend:
-                outp,choice = self.buffer_out.get(seq_id)
-                choice = self.next_stage.get(choice)
-            else:
-                while choice == None:
-                    # print("eeeping....")
-                    await asyncio.sleep(3)
-                    choice = self.choose_next()
-                self.buffer_in[seq_id] = (inp, prev_peer)
-                self.buffer_out[seq_id] = (outp,choice.peerid)
+            while choice == None:
+                # print("eeeping....")
+                await asyncio.sleep(3)
+                choice = self.choose_next()
+        self.buffer_in[seq_id] = (inp, prev_peer)
+        self.buffer_out[seq_id] = (outp,choice.peerid)
         if self.sent.get(choice.peerid) == None:
             self.sent[choice.peerid] = dict()
         self.sent[choice.peerid][seq_id] = datetime.now()
@@ -128,7 +122,7 @@ class SwarmProtocol(AbstractProtocol):
                                       self.timeout, seq_id)
         self.outstanding[seq_id] = timeout
     def send_back(self, seq_id, data):
-        ret = SwarmProtocol.train(self.net, self.optimizer, inp_batch=self.buffer_out.get(seq_id)[0], output=data, rank = self.rank, stage = -1)
+        ret = FaultProtocol.train(self.net, self.optimizer, inp_batch=self.buffer_out.get(seq_id)[0], output=data, rank = self.rank, stage = -1)
         loop = asyncio.get_running_loop()
         loop.create_task(self.send_stream(self.buffer_in.get(seq_id)[1],pickle.dumps(self.buffer_in.get(seq_id)[0].grad),seqdata=seq_id))
         tmp = []
@@ -161,7 +155,7 @@ class SwarmProtocol(AbstractProtocol):
         
         for _,p in self.get_peers():
             # print("introducing to ",p.addr)
-            msg = bytearray([SwarmProtocol.INTRODUCTION])
+            msg = bytearray([FaultProtocol.INTRODUCTION])
             msg = msg  + int(self.rank).to_bytes(4,byteorder="big") + self.peer.id_node
             await self._lower_sendto(msg, p.addr)
         if self.rank == 0: 
@@ -184,7 +178,7 @@ class SwarmProtocol(AbstractProtocol):
                     new_seq_id = bytearray()
                     new_seq_id = int(self.peer.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
                     new_seq_id = bytes(new_seq_id)
-            ret = SwarmProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
+            ret = FaultProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
             ret.retain_grad()
             await self.send_forward(new_seq_id,target, ret)
     @bindfrom("disconnected_callback")
@@ -203,7 +197,7 @@ class SwarmProtocol(AbstractProtocol):
             tmp.append(split(p, self.len_sizes))
                     
                     
-        tmp = SwarmProtocol.custom_avg(tmp)
+        tmp = FaultProtocol.custom_avg(tmp)
         for i, param in enumerate(self.net.parameters()):
             param.data = param.data - 0.01*tmp[i].view(self.sizes[i])
         self.aggregation = []
@@ -216,15 +210,6 @@ class SwarmProtocol(AbstractProtocol):
         loop = asyncio.get_running_loop()
         loop.create_task(
             self.send_forward(seq_id,self.buffer_in[seq_id][0], self.buffer_out[seq_id][0], self.buffer_in[seq_id][1]))
-        return
-    
-    def dataholder_timeout(self,seq_id):
-        print("oops missing batch out",seq_id)
-        
-        
-        loop = asyncio.get_running_loop()
-        loop.create_task(
-            self.send_forward(seq_id,self.buffer_in[seq_id][0], self.buffer_out[seq_id][0], None, True))
         return
     def check_for_back(self):
         if len(self.aggregation) > len(self.same_stage):
@@ -252,7 +237,7 @@ class SwarmProtocol(AbstractProtocol):
                         new_seq_id = int(self.peer.pub_key).to_bytes(1, byteorder="big") + os.urandom(7)
                         new_seq_id = bytes(new_seq_id)
                     
-                    ret = SwarmProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
+                    ret = FaultProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
                     ret.retain_grad()
                     loop = asyncio.get_running_loop()
                     loop.create_task(
@@ -265,16 +250,12 @@ class SwarmProtocol(AbstractProtocol):
         data=pickle.loads(data[12:])
         peer: Peer = self._lower_get_peer(nodeid)
         if stage == (self.rank + 1)% 6:
-            if len(self.same_stage) >= 1 and self.peer.pub_key == "4" and self.iter > 10:
-                print("ME")
-                exit()
             # print("BACKWARDS")
             if self.buffer_in.get(seq_id) == None:
                 print("NOT RECOGNISED BACKWARDS")
                 return
             if self.rank == 0:
-                self.outstanding_batches.get(seq_id).cancel()
-                SwarmProtocol.train(self.net,self.optimizer, inp_batch=self.buffer_out.get(seq_id)[0],output=data, rank = 0, stage = -1)
+                FaultProtocol.train(self.net,self.optimizer, inp_batch=self.buffer_out.get(seq_id)[0],output=data, rank = 0, stage = -1)
                 tmp = []
                 
                 for param in self.net.parameters():
@@ -301,7 +282,9 @@ class SwarmProtocol(AbstractProtocol):
             self.check_for_back()
             
         else:
-            
+            if len(self.same_stage) >= 1 and self.peer.pub_key == "1":
+                print("ME")
+                exit()
             if self.peer.pub_key == "4":
                 print("FORWARDS")
             
@@ -314,15 +297,11 @@ class SwarmProtocol(AbstractProtocol):
                 loop.create_task(self.send_stream(nodeid,pickle.dumps(data.grad),seqdata=seq_id))
                     
             else:
-                if self.buffer_in.get(seq_id) != None:
-                    # need to resend
-                    self.send_complete(seq_id,nodeid)
-                    return self.send_forward(seq_id,data,None, nodeid, True)
                 if self.forward_start!= None:
                     print("TIME IT TOOK", (datetime.now() - self.forward_start).seconds)
                 self.forward_start = datetime.now()
                     
-                ret = SwarmProtocol.train(self.net,self.optimizer, inp_batch=data, rank = self.rank, stage = 1)
+                ret = FaultProtocol.train(self.net,self.optimizer, inp_batch=data, rank = self.rank, stage = 1)
                 ret.retain_grad()
                 loop = asyncio.get_running_loop()
                 loop.create_task(
@@ -335,13 +314,13 @@ class SwarmProtocol(AbstractProtocol):
         loop = asyncio.get_running_loop()
         
         peer: Peer = self._lower_get_peer(nodeid)
-        msg = bytearray([SwarmProtocol.COMPLETE])
+        msg = bytearray([FaultProtocol.COMPLETE])
         msg = msg +  seq_id
         loop.create_task(self.sendto(msg, peer.addr))
     async def sendto(self, msg, addr):
         await self._lower_sendto(msg,addr)
     def process_datagram(self, addr: tuple[str, int], data: bytes):
-        if data[0] == SwarmProtocol.INTRODUCTION:
+        if data[0] == FaultProtocol.INTRODUCTION:
             
             stage = int.from_bytes(data[1:5], byteorder="big")
             nodeid = data[5:]
@@ -357,14 +336,11 @@ class SwarmProtocol(AbstractProtocol):
                 if self.next_stage.get(nodeid) == None:
                     self.next_stage[nodeid] = PeerClassification(nodeid, 15000.0)
             return
-        elif data[0] == SwarmProtocol.COMPLETE:
+        elif data[0] == FaultProtocol.COMPLETE:
             # print("COMPLETE")
             self.outstanding[data[1:]].cancel()
             del self.outstanding[data[1:]]
             self.next_stage[self.buffer_out[data[1:]][1]].delay = 0.6 * self.next_stage[self.buffer_out[data[1:]][1]].delay + 0.4 * (datetime.now() - self.sent[self.buffer_out[data[1:]][1]][data[1:]]).seconds * 1000
-            if self.rank == 0:
-                loop = asyncio.get_event_loop()
-                self.outstanding_batches[data[1:]] = loop.call_later(0, self.dataholder_timeout, data[1:])
             return
         else:
             super().process_datagram(addr, data)
@@ -376,8 +352,8 @@ class SwarmProtocol(AbstractProtocol):
         # print("SENDING TO")
         p: Peer = await self._lower_find_peer(node_id)
         # print("FOUND PEER SENDING")
-        # if seqdata == b'':
-        #     print("if seqdata", seqdata)
+        if seqdata == b'':
+            print("if seqdata", seqdata)
         await self._lower_open_connection(p.addr[0], p.tcp, p.id_node)
         to_send = bytearray(seqdata)
         to_send += stage + data

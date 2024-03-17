@@ -8,7 +8,7 @@ from deccom.protocols.defaultprotocol import DefaultProtocol
 from deccom.peers import Peer
 from deccom.protocols.streamprotocol import StreamProtocol
 from trainingnode import TrainingNode
-from swarmprotocol import SwarmProtocol
+from swarmprotocol2 import SwarmProtocol
 from task_datasets.qqp import get_glue_qqp_train_data_loader
 from task_datasets.tokenizer import build_tokenizer
 import torchvision
@@ -96,24 +96,25 @@ train_loader = None
 n = Peer(("127.0.0.1", 10015))
 if argv[1] != "0":
     gossip.bootstrap_peers.append(n)
-if argv[1] == "0" or argv[1] == "3":
+if argv[1] == "0" or argv[1] == "6":
     
     tokenizer, leng = build_tokenizer()
     train_loader = get_glue_qqp_train_data_loader(tokenizer)
     net = GPTStageFirst(1024,tokenizer.vocab_size, 2, "cpu")
-elif argv[1] == "1" or argv[1] == "4":
+
     
-    tokenizer, leng = build_tokenizer()
-    net = GPTStageMiddle(1024, -1, 2, "cpu")
-    
-elif argv[1] == "2" or argv[1] == "5":
+elif argv[1] == "5" or argv[1] == "11":
     
     tokenizer, leng = build_tokenizer()
     net = GPTStageLast(1024, tokenizer.vocab_size, 2, "cpu")
+else:
+    
+    tokenizer, leng = build_tokenizer()
+    net = GPTStageMiddle(1024, -1, 2, "cpu")
 
 optimizer = optim.SGD(net.parameters(), lr=learning_rate,
                       momentum=momentum)
-training = SwarmProtocol(int(argv[1]) % 3,net,optimizer,train_loader)
+training = SwarmProtocol(int(argv[1]) % 6,net,optimizer,train_loader)
 training.set_lower(stream)
 me = TrainingNode( Peer(None, pub_key=argv[1]), training,"127.0.0.1", 10015 if argv[1] == "0" else None)
 print( "TCP", me.tcp_port)
