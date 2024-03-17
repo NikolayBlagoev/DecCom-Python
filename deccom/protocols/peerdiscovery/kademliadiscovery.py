@@ -47,7 +47,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         # print("refreshing")
         loop = asyncio.get_running_loop()
         if len(self.bucket_manager.buckets) == 1 and len(self.bucket_manager.buckets[0].peers) == 0:
-            # print("i dont know anyone still")
+            print("i dont know anyone still")
             for p in self.bootstrap_peers:
                 await self.introduce_to_peer(p)
                 msg = bytearray([KademliaDiscovery.ASK_FOR_ID])
@@ -106,7 +106,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         if data[0] == KademliaDiscovery.INTRODUCTION:
 
             other, i = Peer.from_bytes(data[1:])
-            # print(self.peer.pub_key,": introduction form", other.pub_key)
+            print(self.peer.pub_key,": introduction form", other.pub_key)
             other.addr = addr
             
                 

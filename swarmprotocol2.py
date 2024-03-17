@@ -100,6 +100,7 @@ class SwarmProtocol(AbstractProtocol):
         # print(choice.delay,len(self.next_stage.items()),choice.peerid)
         return choice
     async def send_forward(self,seq_id, inp, outp, prev_peer = None, resend = False):
+        print(seq_id)
         if self.rank % 6 == 5:
             print("looking for", seq_id[0])
             choice = PeerClassification(SHA256(str(seq_id[0])),0)
@@ -111,11 +112,11 @@ class SwarmProtocol(AbstractProtocol):
                 choice = self.next_stage.get(choice)
             else:
                 while choice == None:
-                    # print("eeeping....")
+                    print("eeeping....")
                     await asyncio.sleep(3)
                     choice = self.choose_next()
-                self.buffer_in[seq_id] = (inp, prev_peer)
-                self.buffer_out[seq_id] = (outp,choice.peerid)
+        self.buffer_in[seq_id] = (inp, prev_peer)
+        self.buffer_out[seq_id] = (outp,choice.peerid)
         if self.sent.get(choice.peerid) == None:
             self.sent[choice.peerid] = dict()
         self.sent[choice.peerid][seq_id] = datetime.now()
@@ -207,9 +208,16 @@ class SwarmProtocol(AbstractProtocol):
     def timeout(self,seq_id):
         print("oops timed out",seq_id)
         nodeid = self.buffer_out[seq_id][1]
+        rt = nodeid
+        if rt != None:
+            rt = self._lower_get_peer(nodeid)
+        if rt == None:
+            print("I DO NOT KNOW THIS MAN")
+        else:
+            print(self.peer.pub_key,rt.pub_key, "timed out /")
         # del self.next_stage[nodeid]
         if self.next_stage.get(nodeid) != None:
-            self.next_stage[nodeid].delay = 8000000
+            self.next_stage[nodeid].delay = float("inf")
         loop = asyncio.get_running_loop()
         loop.create_task(
             self.send_forward(seq_id,self.buffer_in[seq_id][0], self.buffer_out[seq_id][0], self.buffer_in[seq_id][1]))
@@ -218,10 +226,13 @@ class SwarmProtocol(AbstractProtocol):
     def dataholder_timeout(self,seq_id):
         print("oops missing batch out",seq_id)
         
-        
+        # nodeid = self.buffer_out[seq_id][1]
+        # del self.next_stage[nodeid]
+        # if self.next_stage.get(nodeid) != None:
+        #     self.next_stage[nodeid].delay = 8000000
         loop = asyncio.get_running_loop()
         loop.create_task(
-            self.send_forward(seq_id,self.buffer_in[seq_id][0], self.buffer_out[seq_id][0], None, True))
+            self.send_forward(seq_id,self.buffer_in[seq_id][0], self.buffer_out[seq_id][0], self.buffer_in[seq_id][1], True))
         return
     def check_for_back(self):
         if len(self.aggregation) > len(self.same_stage):
@@ -313,8 +324,12 @@ class SwarmProtocol(AbstractProtocol):
             else:
                 if self.buffer_in.get(seq_id) != None:
                     # need to resend
+                    print("NEED TO RESEND!")
                     self.send_complete(seq_id,nodeid)
-                    return self.send_forward(seq_id,data,None, nodeid, True)
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(
+                            self.send_forward(seq_id,data,None, nodeid, True))
+                    return
                 if self.forward_start!= None:
                     print("TIME IT TOOK", (datetime.now() - self.forward_start).seconds)
                 self.forward_start = datetime.now()
@@ -358,10 +373,12 @@ class SwarmProtocol(AbstractProtocol):
             # print("COMPLETE")
             self.outstanding[data[1:]].cancel()
             del self.outstanding[data[1:]]
+            print(self.buffer_out.get(data[1:]) == None)
             self.next_stage[self.buffer_out[data[1:]][1]].delay = 0.6 * self.next_stage[self.buffer_out[data[1:]][1]].delay + 0.4 * (datetime.now() - self.sent[self.buffer_out[data[1:]][1]][data[1:]]).seconds * 1000
+            
             if self.rank == 0:
                 loop = asyncio.get_event_loop()
-                self.outstanding_batches[data[1:]] = loop.call_later(120, self.dataholder_timeout, data[1:])
+                self.outstanding_batches[data[1:]] = loop.call_later(40, self.dataholder_timeout, data[1:])
             return
         else:
             super().process_datagram(addr, data)
@@ -378,7 +395,12 @@ class SwarmProtocol(AbstractProtocol):
         # print("FOUND PEER SENDING")
         if seqdata == b'':
             print("if seqdata", seqdata)
-        await self._lower_open_connection(p.addr[0], p.tcp, p.id_node)
+        ret = await self._lower_open_connection(p.addr[0], p.tcp, p.id_node)
+        if not ret:
+            if self.next_stage.get(node_id) != None:
+                self.next_stage[node_id].delay = float("inf")
+            print("couldn't open connections")
+            return
         to_send = bytearray(seqdata)
         to_send += stage + data
         await self._lower_send_stream(node_id, to_send)
@@ -413,7 +435,12 @@ class SwarmProtocol(AbstractProtocol):
                 return net(inp_batch)
             else:
                 optimizer.zero_grad()
-                inp_batch.backward(output)
+                try:
+                    
+                    inp_batch.backward(output)
+                except:
+                    print(inp_batch)
+                    exit()
                 
                 # optimizer.step()
                 if rank !=0:

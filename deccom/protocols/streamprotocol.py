@@ -99,9 +99,10 @@ class StreamProtocol(AbstractProtocol):
         # print("connection to",remote_port, node_id)
         if node_id==self.peer:
             print("OPENING TO SELF???")
-            return
+            return False
         if remote_port == None:
-            return None
+            print("empty remote port")
+            return False
         if self.connections.get(node_id) != None:
             # print("duplicate connection OPENED")
             
@@ -109,14 +110,14 @@ class StreamProtocol(AbstractProtocol):
                 # print("closing previous, keeping new")
                 self.remove_from_dict(node_id)
             else:
-                # print("keeping old one")
-                return
+                print("keeping old one")
+                return False
         try:
             reader, writer = await asyncio.open_connection(
                         remote_ip, remote_port)
         except ConnectionRefusedError:
-            print("BROKEN")
-            return
+            print("BROKEN SOMETHING")
+            return False
         self.connections[node_id] = DictItem(reader,writer,None,1)
         self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,(remote_ip,remote_port)))
         # print("introducing myself :)")
@@ -124,6 +125,7 @@ class StreamProtocol(AbstractProtocol):
         writer.write(self.peer.id_node)
         writer.write(b'\n')
         await writer.drain()
+        return True
     def set_connected_callback(self, callback):
         self.connected_callback = callback
     async def listen_for_data(self, reader: asyncio.StreamReader, node_id = None, addr = None):
