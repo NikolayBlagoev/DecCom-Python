@@ -74,10 +74,7 @@ class SwarmProtocol(AbstractProtocol):
     @bindto("open_connection")
     async def _lower_open_connection(self):
         return
-    @bindto("send_stream")
-    async def send_stream(self, node_id, data):
-        return
-        
+    
     @bindto("get_peer")
     def _lower_get_peer(self, p: Peer):
         return None
@@ -369,6 +366,9 @@ class SwarmProtocol(AbstractProtocol):
         else:
             super().process_datagram(addr, data)
         
+    @bindto("send_stream")
+    async def _lower_send_stream(self, node_id, data):
+        return
     async def send_stream(self, node_id, data, seqdata=b'', stage = None):
         if stage == None:
             stage = self.rank
@@ -376,12 +376,12 @@ class SwarmProtocol(AbstractProtocol):
         # print("SENDING TO")
         p: Peer = await self._lower_find_peer(node_id)
         # print("FOUND PEER SENDING")
-        # if seqdata == b'':
-        #     print("if seqdata", seqdata)
+        if seqdata == b'':
+            print("if seqdata", seqdata)
         await self._lower_open_connection(p.addr[0], p.tcp, p.id_node)
         to_send = bytearray(seqdata)
         to_send += stage + data
-        await self.send_stream(node_id, to_send)
+        await self._lower_send_stream(node_id, to_send)
         return
     def get_lowest_stream(self):
         submodule = self.submodule
