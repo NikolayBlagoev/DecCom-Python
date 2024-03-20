@@ -19,10 +19,10 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.11.6'  # Set the Python version you want to use
+        python-version: '3.11.6'
 
     - name: Install dependencies
       run: pip install -r requirements.txt
 
     - name: Run unittests
-      run: python -m unittest discover  # Run your unittests
+      run: python -m unittest discover tests

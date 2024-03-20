@@ -115,6 +115,7 @@ class SwarmProtocol(AbstractProtocol):
                     print("eeeping....")
                     await asyncio.sleep(3)
                     choice = self.choose_next()
+        print("sending to",self._lower_get_peer(choice.peerid).pub_key)
         self.buffer_in[seq_id] = (inp, prev_peer)
         self.buffer_out[seq_id] = (outp,choice.peerid)
         if self.sent.get(choice.peerid) == None:
@@ -215,9 +216,10 @@ class SwarmProtocol(AbstractProtocol):
             print("I DO NOT KNOW THIS MAN")
         else:
             print(self.peer.pub_key,rt.pub_key, "timed out /")
-        # del self.next_stage[nodeid]
+        
         if self.next_stage.get(nodeid) != None:
             self.next_stage[nodeid].delay = float("inf")
+            del self.next_stage[nodeid]
         loop = asyncio.get_running_loop()
         loop.create_task(
             self.send_forward(seq_id,self.buffer_in[seq_id][0], self.buffer_out[seq_id][0], self.buffer_in[seq_id][1]))
@@ -267,13 +269,16 @@ class SwarmProtocol(AbstractProtocol):
                             self.send_forward(new_seq_id,target, ret))
     @bindfrom("stream_callback")
     def process_data(self, data:bytes, nodeid, addr):
+        if len(data) < 12:
+            print("tooooo smalll")
+            return
         seq_id = bytes(data[0:8])
         stage = int.from_bytes(data[8:12],byteorder="big")
         # print("\n\n\n",seq_id,"\n\n\n")
         data=pickle.loads(data[12:])
         peer: Peer = self._lower_get_peer(nodeid)
         if stage == (self.rank + 1)% 6:
-            if len(self.same_stage) >= 1 and self.peer.pub_key == "4" and self.iter > 10:
+            if len(self.same_stage) >= 1 and self.peer.pub_key == "4" and self.iter > 5:
                 print("ME")
                 exit()
             # print("BACKWARDS")
@@ -282,6 +287,7 @@ class SwarmProtocol(AbstractProtocol):
                 return
             if self.rank == 0:
                 self.outstanding_batches.get(seq_id).cancel()
+                print("cancelled timeout")
                 SwarmProtocol.train(self.net,self.optimizer, inp_batch=self.buffer_out.get(seq_id)[0],output=data, rank = 0, stage = -1)
                 tmp = []
                 
@@ -328,7 +334,7 @@ class SwarmProtocol(AbstractProtocol):
                     self.send_complete(seq_id,nodeid)
                     loop = asyncio.get_running_loop()
                     loop.create_task(
-                            self.send_forward(seq_id,data,None, nodeid, True))
+                            self.send_forward(seq_id,self.buffer_in.get(seq_id)[0],None, nodeid, True))
                     return
                 if self.forward_start!= None:
                     print("TIME IT TOOK", (datetime.now() - self.forward_start).seconds)
@@ -377,8 +383,9 @@ class SwarmProtocol(AbstractProtocol):
             self.next_stage[self.buffer_out[data[1:]][1]].delay = 0.6 * self.next_stage[self.buffer_out[data[1:]][1]].delay + 0.4 * (datetime.now() - self.sent[self.buffer_out[data[1:]][1]][data[1:]]).seconds * 1000
             
             if self.rank == 0:
+                print("setting timeout for lost batch")
                 loop = asyncio.get_event_loop()
-                self.outstanding_batches[data[1:]] = loop.call_later(40, self.dataholder_timeout, data[1:])
+                self.outstanding_batches[data[1:]] = loop.call_later(90, self.dataholder_timeout, data[1:])
             return
         else:
             super().process_datagram(addr, data)
@@ -391,15 +398,19 @@ class SwarmProtocol(AbstractProtocol):
             stage = self.rank
         stage = int(stage).to_bytes(4,byteorder="big")
         # print("SENDING TO")
+        if node_id == None:
+            print("tried to send to noone ???")
+            raise Exception("poopsie?")
         p: Peer = await self._lower_find_peer(node_id)
-        # print("FOUND PEER SENDING")
+        print("FOUND PEER SENDING TO",p.pub_key)
         if seqdata == b'':
             print("if seqdata", seqdata)
+            return
         ret = await self._lower_open_connection(p.addr[0], p.tcp, p.id_node)
         if not ret:
             if self.next_stage.get(node_id) != None:
                 self.next_stage[node_id].delay = float("inf")
-            print("couldn't open connections")
+            print("couldn't open connection for some reason to",p.pub_key)
             return
         to_send = bytearray(seqdata)
         to_send += stage + data

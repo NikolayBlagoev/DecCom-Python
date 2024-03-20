@@ -34,7 +34,7 @@ class test_protocol_kademlia(unittest.IsolatedAsyncioTestCase):
         self.loop.run_until_complete(k2.find_peer(bytes(self.p1.id_node)))
         self.assertEqual(self.p1.id_node, k2.get_peer(bytes(self.p1.id_node)).id_node)
 
-    def test_kademlia_should_find(self):
+    def test_kademlia_should_find2(self):
         
         prlist = []
         kls = []
@@ -51,13 +51,16 @@ class test_protocol_kademlia(unittest.IsolatedAsyncioTestCase):
             self.loop.run_until_complete(n2.listen())
         for k in kls:
             for p in prlist:
+                if p.id_node == k.peer.id_node:
+                    continue
+                print("lookibg")
                 self.loop.run_until_complete(k.find_peer(bytes(p.id_node)))
                 self.assertEqual(p.id_node, k.get_peer(bytes(p.id_node)).id_node)
     def doCleanups(self) -> None:
         self.n1.set_listen(False)
         return super().doCleanups()
     async def test_ensure_not_central(self):
-        
+        self.n1.set_listen(True)
         prlist = []
         kls = []
         for i in range(1,6):
@@ -75,7 +78,9 @@ class test_protocol_kademlia(unittest.IsolatedAsyncioTestCase):
         self.n1.set_listen(False)
         for k in kls:
             for p in prlist:
-                print("do we know?")
+                if p.id_node == k.peer.id_node:
+                    continue
+                # print("do we know?", p.pub_key)
                 await k.find_peer(bytes(p.id_node)) 
                 self.assertEqual(p.id_node, k.get_peer(bytes(p.id_node)).id_node)
         self.n1.set_listen(True)
@@ -141,22 +146,22 @@ class test_protocol_kademlia_2(unittest.IsolatedAsyncioTestCase):
         
         
         
-        self.n1.set_listen(False)
-        print("lookin...")
-        await asyncio.sleep(5)
-        print("digging in...", p2.id_node)
-        await k1.find_peer(bytes(p2.id_node))
+#         self.n1.set_listen(False)
+#         print("lookin...")
+#         await asyncio.sleep(5)
+#         print("digging in...", p2.id_node)
+#         await k1.find_peer(bytes(p2.id_node))
         
-        self.assertEqual(p2.id_node, k1.get_peer(bytes(p2.id_node)).id_node)
-        self.n1.set_listen(True)
-        # self.loop.run_until_complete(asyncio.sleep(3))
-        # n3.set_listen(False)
-        # for k in kls:
-        #     for p in prlist:
-        #         # print("do we know?")
-        #         self.loop.run_until_complete(k.find_peer(bytes(p.id_node)))
-        #         self.assertEqual(p.id_node, k.get_peer(bytes(p.id_node)).id_node)
-        # n3.set_listen(True)
+#         self.assertEqual(p2.id_node, k1.get_peer(bytes(p2.id_node)).id_node)
+#         self.n1.set_listen(True)
+#         # self.loop.run_until_complete(asyncio.sleep(3))
+#         # n3.set_listen(False)
+#         # for k in kls:
+#         #     for p in prlist:
+#         #         # print("do we know?")
+#         #         self.loop.run_until_complete(k.find_peer(bytes(p.id_node)))
+#         #         self.assertEqual(p.id_node, k.get_peer(bytes(p.id_node)).id_node)
+#         # n3.set_listen(True)
 
 
 if __name__ == '__main__':

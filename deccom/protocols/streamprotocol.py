@@ -104,14 +104,14 @@ class StreamProtocol(AbstractProtocol):
             print("empty remote port")
             return False
         if self.connections.get(node_id) != None:
-            # print("duplicate connection OPENED")
+            print("duplicate connection OPENED")
             
             if self.connections.get(node_id).opened_by_me * ternary_comparison(self.peer.id_node, node_id) == -1:
                 # print("closing previous, keeping new")
                 self.remove_from_dict(node_id)
             else:
                 print("keeping old one")
-                return False
+                return True
         try:
             reader, writer = await asyncio.open_connection(
                         remote_ip, remote_port)
@@ -138,7 +138,7 @@ class StreamProtocol(AbstractProtocol):
         if data == b'':
             if node_id !=None and self.connections.get(node_id) != None:
                 self.connections[node_id].fut = None
-            print("closing", addr,node_id)
+            print("closing because received empty bytes", addr,node_id)
             self.remove_from_dict(node_id)
             self.closed_stream(node_id, addr)
             return

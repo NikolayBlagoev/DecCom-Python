@@ -1,7 +1,7 @@
 
 from collections import OrderedDict
 from deccom.peers.peer import Peer
-
+import time
 class KBucket(object):
     def __init__(self, min_dist, max_dist, k, originator = False, success_call = lambda addr, p : ...):
         self.min_dist = min_dist
@@ -12,6 +12,9 @@ class KBucket(object):
         self.success_call = success_call
         self.originator = originator
         self.toadd: list[tuple[bytes,Peer]] = []
+        self.updated = time.monotonic()
+    def touch(self):
+        self.updated = time.monotonic()
     def split_bucket(self):
         to_split = self.mid_point
         left = KBucket(self.min_dist, to_split, self.k, success_call = self.success_call)
@@ -40,56 +43,61 @@ class KBucket(object):
         
         
     def update_peer(self, dist, node):
-            if self.peers.get(dist) == None and len(self.peers) < self.k:
-                self.peers[dist] = node
-            elif self.peers.get(dist) != None:
-
-                del self.peers[dist]
-                self.peers[dist] = node
-            elif len(self.peers) > self.k:
-                if (dist,node) in self.toadd:
-                    self.toadd.remove((dist,node))
+        self.touch()
+        if self.peers.get(dist) == None and len(self.peers) < self.k:
+            self.peers[dist] = node
                 
-                self.toadd.append((dist,node))
-                self.toadd = self.toadd[-5:]
+        elif self.peers.get(dist) != None:
+
+            del self.peers[dist]
+            self.peers[dist] = node
+        elif len(self.peers) > self.k:
+            if (dist,node) in self.toadd:
+                self.toadd.remove((dist,node))
+                
+            self.toadd.append((dist,node))
+            self.toadd = self.toadd[-5:]
                     
     def remove_peer(self, dist):
             
-            if self.peers.get(dist) == None:
-                return
-            del self.peers[dist]
-            if len(self.toadd) > 0:
+        if self.peers.get(dist) == None:
+            return
+        del self.peers[dist]
+        if len(self.toadd) > 0:
                 
-                dist,peer = self.toadd.pop()
-                self.success_call(dist, peer)
-                self.peers[dist] = peer
+            dist,peer = self.toadd.pop()
+            self.success_call(dist, peer)
+            self.peers[dist] = peer
 
     def get_peer(self, dist):
         
         return self.peers.get(dist)
     def add_peer(self, dist, node):
-            if self.peers.get(dist) != None:
-                del self.peers[dist]
-                self.peers[dist] = node
-                return 0
-            if len(self.peers) >= self.k:
-                if self.originator:
-                    self.toadd.append((dist,node))
-                    return 1
+        self.touch()
+        if self.peers.get(dist) != None:
+            del self.peers[dist]
+            self.peers[dist] = node
+            return 0
+        if len(self.peers) >= self.k:
+            if self.originator:
+                self.toadd.append((dist,node))
+                return 1
                     
-                else:
-                    if (dist,node) in self.toadd:
-                        return 2
-                    
-                    self.toadd.append((dist,node))
-                    self.toadd = self.toadd[-5:]
-                    
-                    return 2
             else:
-                self.peers[dist] = node
-                return 0
+                if (dist,node) in self.toadd:
+                    return 2
+                    
+                self.toadd.append((dist,node))
+                self.toadd = self.toadd[-5:]
+                    
+                return 2
+        else:
+            self.peers[dist] = node
+            return 0
     def get_top(self) -> tuple[bytes,Peer]:
         return list(self.peers.items())[0]
+    def __len__(self):
+        return len(self.peers)
         
         
         
@@ -108,6 +116,12 @@ class BucketManager(object):
         if len(b1) != len(b2):
             raise Exception("WRONG IDS")
         return bytes(a ^ b for a, b in zip(b1, b2))
+    def get_smallest_bucket(self):
+        sml = self.buckets[0]
+        for b in self.buckets:
+            if len(b) <= len(sml):
+                sml = b
+        return sml.mid_point
     def get_peer(self, id) -> Peer:
         if isinstance(id, bytearray):
             id = bytes(id)
@@ -117,7 +131,13 @@ class BucketManager(object):
         indx = self._get_index(dist)
         return self.buckets[indx].get_peer(dist)
     
-    
+    def get_buckets_not_updated(self, tm):
+        t = time.monotonic()
+        ret: list[int] = [] 
+        for b in self.buckets:
+            if t - b.updated >= tm:
+                ret.append(b.mid_point)
+        return ret
     
     def update_peer(self, id, node) -> Peer:
         if isinstance(id, bytearray):
@@ -132,6 +152,7 @@ class BucketManager(object):
     def add_peer(self,id,node, lv=0):
         if self.get_peer(id) != None:
             return None
+        
         if isinstance(id, bytearray):
             id = bytes(id)
         # print(lv)
@@ -144,14 +165,18 @@ class BucketManager(object):
         indx = self._get_index(dist)
         
         ret = self.buckets[indx].add_peer(dist,node)
+        
         if ret == 0:
+            
             return None
         elif ret == 1:
             l,r = self.buckets[indx].split_bucket()
             self.buckets[indx] = l
             self.buckets.insert(indx+1,r)
+            
             return self.add_peer(id,node,lv+1)
         elif ret == 2:
+            
             return self.buckets[indx].get_top()
     def _get_index(self, dist)->int:
         indx = -1
@@ -183,7 +208,7 @@ class BucketManager(object):
         lst: list[Peer] = []
         lst += list(self.buckets[idx].peers.values())
         diff = 1
-        idx += diff
+        
         stopper = max(idx, len(self.buckets)-idx)
         # print("stopper", idx, len(self.buckets), stopper, len(lst), alpha)
         # acc = 0
@@ -195,6 +220,7 @@ class BucketManager(object):
             
             if idx + diff >= 0 and idx + diff < len(self.buckets):
                 lst += list(self.buckets[idx + diff].peers.values())
+                
             if diff < 0:
                 diff *= -1
                 diff += 1
@@ -203,6 +229,7 @@ class BucketManager(object):
             
             if abs(diff) > stopper + 1:
                 break
+        
         lst = lst[:alpha]    
         return lst
 

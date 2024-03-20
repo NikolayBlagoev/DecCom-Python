@@ -52,13 +52,13 @@ class GPTStageBase(nn.Module):
         self._to_cpu = True
         self.task = 'Seq2SeqClassification'
         self._vocab_size = vocab_size
-        self._embedding_dim =768  # embedding dimension
+        self._embedding_dim = 768  # embedding dimension
         self._seq_length = seql
         self._num_classes = num_classes
         # the dimension of the feedforward aws_network model in nn.TransformerEncoder
         self._feedforward_dim = 768 * 4
-        self._num_heads = 4  # the number of heads in the multi-head attention models
-        self._num_layers = 2
+        self._num_heads = 96  # the number of heads in the multi-head attention models
+        self._num_layers = 1
 
     def _create_first_layer(self):
         return GPTEmbedding(self._vocab_size, self._embedding_dim, self._seq_length)
@@ -259,7 +259,7 @@ class GlueSeqClassificationModel(torch.nn.Module):
 
         module_list = []
         for _ in range(2):
-            module_list.append(GPTTransformerLayer(768, 4,768*4,
+            module_list.append(GPTTransformerLayer(12288, 96,768*4,
                                                    use_checkpoint=use_checkpoint))
         self.transformers = torch.nn.Sequential(*module_list)
         self.classifier = SeqClassification(768, num_classes)
@@ -278,10 +278,10 @@ class GlueSeq2SeqClassificationModel(torch.nn.Module):
 
         module_list = []
         for _ in range(2):
-            module_list.append(GPTTransformerLayer(768, 4, 768*4,
+            module_list.append(GPTTransformerLayer(12288, 96, 12288*4,
                                                    use_checkpoint=use_checkpoint))
         self.transformers = torch.nn.Sequential(*module_list)
-        self.classifier = Seq2SeqClassification(vocab_size, 768)
+        self.classifier = Seq2SeqClassification(vocab_size, 12288)
 
     def forward(self, input_ids, target_ids, position_ids=None):
         input_emb = self.embedding(input_ids, position_ids)

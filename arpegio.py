@@ -35,13 +35,15 @@ class Arpegio(AbstractProtocol):
         self.stage_peers: dict[bytes, int] = dict()
         self.per_stage: dict[int, list[StagePeer]] = dict()
         self.peers: dict[bytes, StagePeer] = dict()
-        self.T = 2
+        self.T = 3
+        self.cooling = 0.992
         self.curr_costs = []
         self.max_cost = float("inf")
         self.offer = None
         self.can_switch = True
         self.alpha = 2
-        self.counter = 0
+        self.counter = 1
+        self.attemps = 0
         self.iterations = [(0, self.stage)]
     
     def broadcast_introduction(self):
@@ -80,9 +82,9 @@ class Arpegio(AbstractProtocol):
             return
         if self.peers.get(pid) != None:
                 stg = self.peers[pid]
-                if stg.counter >= counter:
+                if stg.counter > counter:
                     return
-                print("updating peer\n\n")
+                # print("updating peer\n\n")
                 stg.counter = counter
                 if self.stage_peers.get(pid) != None:
                     currstage = self.stage_peers.get(pid)
@@ -92,6 +94,9 @@ class Arpegio(AbstractProtocol):
                     self.per_stage[stage] = []
                 self.per_stage[stage].append(stg)
                 self.stage_peers[pid] = stage
+        else:
+            loop = asyncio.get_event_loop()
+            loop.create_task(self.find_peer(pid))
     def calculate_cost(self, k = 100):
         self.max_cost = 0
         if self.per_stage.get(self.stage) == None:
@@ -103,7 +108,10 @@ class Arpegio(AbstractProtocol):
         tmp = tmp[:k]
         for c in tmp:
             self.max_cost += c
-        print("new cost ", self.max_cost)
+        ttp = 0
+        for k,v in self.per_stage.items():
+            ttp += len(v)
+        print("new cost ", self.max_cost,len(self.per_stage[self.stage]), ttp)
 
         
     def process_datagram(self, addr: tuple[str, int], data: bytes):
@@ -121,6 +129,11 @@ class Arpegio(AbstractProtocol):
             if them == self.peer.id_node:
                 print("thats me")
                 exit()
+            elif self.get_peer(them) == None:
+                self.reject_proposal(addr,self.max_cost, self.stage)
+                loop = asyncio.get_event_loop()
+                loop.create_task(self.find_peer(them))
+                return
             i+=32
             mystage = data[i]
             i += 1
@@ -136,6 +149,27 @@ class Arpegio(AbstractProtocol):
                     print(" already have an offer, not to them tho...")
                     self.reject_proposal(addr,self.max_cost, self.stage)
                     return
+                else:
+                    if True:
+                        self.reject_proposal(addr,self.max_cost, self.stage)
+                        return
+                    else:
+                        self.counter += 1
+                        self.accept_proposal(addr, self.max_cost, self.stage)
+                        self.T = self.cooling*self.T
+                        self.alpha = max(1, self.alpha * 0.9)
+                        
+                        self.max_cost = -1
+                        self.per_stage[self.peers[them].stage].remove(self.peers[them])
+                        self.stage_peers[them] = self.stage
+                        self.peers[them].stage = self.stage
+                        if self.per_stage.get(self.stage) == None:
+                            self.per_stage[self.stage] = []
+                        self.per_stage[self.stage].append(self.peers[them])
+
+                        self.stage = their_stage
+                        self.broadcast_introduction()
+                        return
             mycost = self.max_cost
             theircost = 0
             costs: dict[bytes, float] = dict()
@@ -219,7 +253,8 @@ class Arpegio(AbstractProtocol):
                 return
             mycost = self.max_cost
             # if self.T * (mycost)**self.alpha > their_max_same**self.alpha and self.T * (their_max_cost_reported)**self.alpha > my_same_max**self.alpha:
-            if mycost > their_max_same and their_max_cost_reported > my_same_max:
+            # if mycost > their_max_same and their_max_cost_reported > my_same_max:
+            if max(my_same_max,their_max_same) < max(mycost,their_max_cost_reported):
                 print("perform switch", self.T * mycost, their_max_same, self.T * their_max_cost_reported, my_same_max, self.T, len(mysame),self.stage)
                 print("going from ", self.stage," to ", their_stage)
                 #perform switch 2.9763498325156017 0.8402053564786911 3.3682570280230477 0.037882558746736295
@@ -227,8 +262,8 @@ class Arpegio(AbstractProtocol):
 # proposal received
 # wrong stage
                 self.counter += 1
-                self.accept_proposal(addr, my_same_max, their_stage)
-                self.T = 0.95*self.T
+                self.accept_proposal(addr, my_same_max, self.stage)
+                self.T = self.cooling*self.T
                 self.alpha = max(1, self.alpha * 0.9)
                 
                 self.max_cost = -1
@@ -245,7 +280,7 @@ class Arpegio(AbstractProtocol):
                 
             else:
                 r = random.uniform(0,1)
-                if exp((their_max_cost_reported - their_max_same)/self.T) > r and exp((mycost - my_same_max)/self.T) > r:
+                if exp((max(mycost,their_max_cost_reported) - max(my_same_max,their_max_same))/self.T) > r:
                     print("WRONG! perform switch", self.T * mycost, their_max_same, self.T * their_max_cost_reported, my_same_max, self.T, len(mysame),self.stage)
                     print("going from ", self.stage," to ", their_stage)
                     print(exp((mycost + their_max_cost_reported - my_same_max - their_max_same)/self.T), r)
@@ -254,9 +289,9 @@ class Arpegio(AbstractProtocol):
     # proposal received
     # wrong stage
                     self.counter += 1
-                    self.accept_proposal(addr, my_same_max, their_stage)
+                    self.accept_proposal(addr, my_same_max, self.stage)
                     
-                    self.T = 0.95 * self.T
+                    self.T = self.cooling * self.T
                     self.alpha = max(1, self.alpha * 0.9)
                     
                     self.max_cost = -1
@@ -282,15 +317,16 @@ class Arpegio(AbstractProtocol):
             if data[1] == 0:
                 
                 print("they accepted")
-                if data[2] == self.stage:
+                tmp = self.stage
+                if data[2] == self.offer.theirstage:
                     print("with correct stage")
                     self.counter += 1
-                    self.T = 0.95*self.T
+                    self.T = self.cooling*self.T
                     self.alpha = max(1, self.alpha * 0.9)
-                    self.stage = self.peers[self.offer.to].stage
+                    self.stage = self.offer.theirstage
                     self.broadcast_introduction()
                 
-                self.update_peer(data[2], self.offer.to, int.from_bytes(data[3:7], byteorder="big"))
+                self.update_peer(tmp, self.offer.to, int.from_bytes(data[3:7], byteorder="big"))
                 self.offer = None
                 return
                 
@@ -304,11 +340,11 @@ class Arpegio(AbstractProtocol):
                 i = 11
                 loop = asyncio.get_event_loop()
                 while i < len(data):
-                    if self.peers.get(data[i:i+32]) == None:
+                    # if self.peers.get(data[i:i+32]) == None:
                         
-                        loop.create_task(self.find_peer(data[i:i+32]))
-                        i+=36
-                        continue
+                    #     loop.create_task(self.find_peer(data[i:i+32]))
+                    #     i+=36
+                    #     continue
                     pr = data[i:i+32]
                     i+=32
                     counter = int.from_bytes(data[i:i+4], byteorder="big")
@@ -352,6 +388,7 @@ class Arpegio(AbstractProtocol):
         loop.create_task(self._lower_sendto(msg, to))
         return 
     def send_proposal(self, to, proof: list[tuple[StagePeer, float]]):
+        self.attemps = 5
         self.offer = ChangeOffer(to, self.stage_peers[to])
         addr = self.get_peer(to).addr
         msg = bytearray([Arpegio.PROPOSE_CHANGE])
@@ -394,7 +431,8 @@ class Arpegio(AbstractProtocol):
                         continue
                     tmo_cost += 100*self.costmap(vl.p.pub_key, other.p.pub_key)
                     summed_cost += 100*self.costmap(vl.p.pub_key, other.p.pub_key)
-                if vl.stage == self.stage:
+                
+                if k == self.stage:
                     tmo_cost += 100*self.costmap(vl.p.pub_key, self.peer.pub_key)
                     summed_cost += 2*100*self.costmap(vl.p.pub_key, self.peer.pub_key)
                 total_cost = max(total_cost, tmo_cost)
@@ -409,43 +447,42 @@ class Arpegio(AbstractProtocol):
             
         self.iterations.append((self.iterations[-1][0] + 1, total_cost, intralayercost, summed_cost, counter_nodes, summed_cost/(2*counter_nodes)))
         if self.peer.pub_key == "0":
+            for k,v in self.per_stage.items():
+                print(k, len(v))
             print(self.iterations)
-        if len(self.iterations) > 120:
+        if len(self.iterations) > 310:
+            for k,v in self.per_stage.items():
+                print(k, len(v))
             exit()
-        minb = self.peer.id_node
+        
         count = 1
         diff_stages: list[bytes] = []
-        curr_costs_sames = []
-        curr_cost_same = 0
-        curr_cost_diff = 0
-        if self.offer != None:
+        self.calculate_cost()
+        if self.offer != None or  len(self.iterations) > 300:
+            if len(self.iterations) > 300:
+                self.broadcast_introduction()
+            if self.attemps == 0:
+                self.offer = None
+            self.attemps -= 1
             loop = asyncio.get_event_loop()
-            self.refresh_loop = loop.call_later(2, self._periodic)
+            self.refresh_loop = loop.call_later(3, self._periodic)
             return
         for k,v in self.stage_peers.items():
-            if v == self.stage:
-                count += 1
-                curr_cost_same += 100*self.costmap(self.peer.pub_key, self.get_peer(k).pub_key)
-                curr_costs_sames.append(100*self.costmap(self.peer.pub_key, self.get_peer(k).pub_key))
-                minb = minb if minb < k else k
-            else:
+            if v != self.stage: 
                 diff_stages.append(k)
-            if v == self.stage - 1 or v == self.stage + 1:
-                curr_cost_diff = max(10*self.costmap(self.peer.pub_key, self.get_peer(k).pub_key),curr_cost_diff)
-        self.calculate_cost()
-        curr_costs_sames.sort()
-        self.curr_costs = curr_costs_sames[:5]
-        rn = random.random() < 0.5
+        
+        
+        rn = random.uniform(0,1) < 0.3
         # if (count > 1 and minb == self.peer.id_node) or len(diff_stages) == 0 or self.offer != None:
         if rn or self.offer!=None:
             print("count",count, len(diff_stages))
             self.can_switch = False
 
             loop = asyncio.get_event_loop()
-            self.refresh_loop = loop.call_later(2, self._periodic)
+            self.refresh_loop = loop.call_later(3, self._periodic)
             return
         self.can_switch = True
-        diff_stages = random.sample(diff_stages,min(10, len(diff_stages)))
+        diff_stages = random.sample(diff_stages,min(15, len(diff_stages)))
         cost_minimisation = 0
         chs = None
         proof = []
@@ -468,11 +505,11 @@ class Arpegio(AbstractProtocol):
             tmp_proof = []
             for p in prvpprs + nxtprs:
                 
-                tmp_proof.append((p,100*self.costmap(self.peer.pub_key, self.get_peer(p.p.id_node).pub_key), p.counter))
+                tmp_proof.append((p,100*self.costmap(self.peer.pub_key, p.p.pub_key), 0))
            
             for p in smpr:
-                tmp_cost_same += 100*self.costmap(self.peer.pub_key, self.get_peer(p.p.id_node).pub_key)
-                tmp_proof.append((p,100*self.costmap(self.peer.pub_key, self.get_peer(p.p.id_node).pub_key),p.counter))
+                tmp_cost_same += 100*self.costmap(self.peer.pub_key,p.p.pub_key)
+                tmp_proof.append((p,100*self.costmap(self.peer.pub_key, p.p.pub_key),p.counter))
                 
             
             if self.max_cost - tmp_cost_same > cost_minimisation or (cost_minimisation<=0 and exp((self.max_cost - tmp_cost_same)/self.T) > random.uniform(0,1)):
@@ -481,12 +518,16 @@ class Arpegio(AbstractProtocol):
                 proof = tmp_proof
                 print("minimisation of ", tmp_cost_same, self.max_cost, pr.max_cost)
         if chs != None:
-            print("sending proposal to",self.get_peer(chs).pub_key)
-            self.send_proposal(chs, proof)
+            if self.get_peer(chs) == None:
+                loop = asyncio.get_event_loop()
+                loop.create_task(self.find_peer(chs))
+            else:
+                print("sending proposal to",self.get_peer(chs).pub_key)
+                self.send_proposal(chs, proof)
         else:
             print("No proposal")
         loop = asyncio.get_event_loop()
-        self.refresh_loop = loop.call_later(2, self._periodic)
+        self.refresh_loop = loop.call_later(3, self._periodic)
 
 
 

@@ -8,7 +8,7 @@ from deccom.protocols.defaultprotocol import DefaultProtocol
 from deccom.peers import Peer
 from deccom.protocols.streamprotocol import StreamProtocol
 from trainingnode import TrainingNode
-from swarmprotocol2 import SwarmProtocol
+from faultprotocol import FaultProtocol
 from task_datasets.qqp import get_glue_qqp_train_data_loader
 from task_datasets.tokenizer import build_tokenizer
 import torchvision
@@ -87,7 +87,7 @@ class Pipe2(nn.Module):
 
 
 protocol = DefaultProtocol()
-gossip = KademliaDiscovery([])
+gossip = KademliaDiscovery([],interval=12)
 gossip.set_lower(protocol)
 stream = StreamProtocol(False)
 stream.set_lower(gossip)
@@ -99,6 +99,7 @@ if argv[1] != "0":
 if argv[1] == "0" or argv[1] == "6":
     
     tokenizer, leng = build_tokenizer()
+    print(tokenizer.vocab_size)
     train_loader = get_glue_qqp_train_data_loader(tokenizer)
     net = GPTStageFirst(1024,tokenizer.vocab_size, 2, "cpu")
 
@@ -114,7 +115,7 @@ else:
 
 optimizer = optim.SGD(net.parameters(), lr=learning_rate,
                       momentum=momentum)
-training = SwarmProtocol(int(argv[1]) % 6,net,optimizer,train_loader)
+training = FaultProtocol(int(argv[1]) % 6,net,optimizer,train_loader)
 training.set_lower(stream)
 me = TrainingNode( Peer(None, pub_key=argv[1]), training,"127.0.0.1", 10015 if argv[1] == "0" else None)
 print( "TCP", me.tcp_port)
