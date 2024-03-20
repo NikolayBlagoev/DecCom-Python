@@ -7,6 +7,7 @@ from deccom.peers.peer import Peer
 from deccom.protocols.peerdiscovery.abstractpeerdiscovery import AbstractPeerDiscovery
 from ._kademlia_routing import BucketManager
 from deccom.protocols.wrappers import *
+from ._finder import Finder
 class KademliaDiscovery(AbstractPeerDiscovery):
     INTRODUCTION = int.from_bytes(b'\xe1', byteorder="big") # english opening king's variation
     RESPOND_FIND = int.from_bytes(b'\xc4', byteorder="big")
@@ -27,6 +28,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         self.sent_finds = dict()
         self.warmup = 0
         self.searches: dict[bytes,bytes] = dict()
+        self.finders: dict[bytes, Finder] = dict()
     async def start(self, p: Peer):
         await super().start(p)
         self.bucket_manager = BucketManager(self.peer.id_node,self.k,self._add)
@@ -45,7 +47,6 @@ class KademliaDiscovery(AbstractPeerDiscovery):
 
     async def _refresh_table(self):
         # print("refreshing")
-        self.warmup = 0
         loop = asyncio.get_running_loop()
         if len(self.bucket_manager.buckets) == 1 and len(self.bucket_manager.buckets[0].peers) == 0:
             print("i dont know anyone still")
@@ -55,17 +56,27 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 await self._lower_sendto(msg,p.addr)
             self.refresh_loop = loop.call_later(2, self.refresh_table)
             return
-        rand_ids = [self.peer.id_node]
+        rand_ids = []
         other = self.bucket_manager.get_smallest_bucket().to_bytes(32, byteorder = "big")
         rand_ids.append(other)
         unique_id = os.urandom(8)
         while self.searches.get(unique_id) != None:
             unique_id = os.urandom(8)
-        
+        if self.warmup == 0:
+            rand_ids = [self.peer.id_node]
+            
+            self.finders[unique_id] = Finder(self.peer.id_node, self.bucket_manager.get_closest(rand_ids[0],3), 3)
+            l = self.finders[unique_id].find_peer()
+            for p in l:
+                msg = bytearray([KademliaDiscovery.FIND ^ 1])
+                msg += unique_id
+                msg += rand_ids[0]
+                await self._lower_sendto(msg,p.addr)
+            return
+
         ret = self.bucket_manager.get_buckets_not_updated(self.interval)
         for r in ret:
             rand_ids.append(r.to_bytes(32, byteorder="big"))
-
         for ids in rand_ids:
             l = self.bucket_manager.get_closest(ids,3)
             if len(l) == 0:
@@ -166,12 +177,16 @@ class KademliaDiscovery(AbstractPeerDiscovery):
             
             if self.searches.get(unique_id) != None:
                 for p in peers:
-                    if p.id_node == self.searches.get(unique_id):
+                    if p.id_node == self.searches.get(unique_id) and p.id_node != self.peer.id_node:
                         # print("oh he in here!")
                         loop = asyncio.get_running_loop()
                         loop.create_task(self.introduce_to_peer(p))
-                        loop.create_task(self.send_find(unique_id,p,for_peer=p.id_node))
-                        # self.connection_approval(p.addr,p,self.add_peer,self.ban_peer)
+                        msg = bytearray([KademliaDiscovery.FIND])
+                        msg += unique_id
+                        msg += self.finders[unique_id].look_for
+                        del self.finders[unique_id]
+                        loop.create_task(self._lower_sendto(msg, p.addr))
+                        
                         
                         return
                     
@@ -180,15 +195,19 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 if self.bucket_manager.get_peer(p.id_node) == None and p.id_node != self.peer.id_node:
                     loop = asyncio.get_running_loop()
                     loop.create_task(self.introduce_to_peer(p))
-                    loop.create_task(self.send_find(unique_id,p,for_peer = p.id_node))
-                    if self.warmup < 60:
-                        
-                        loop.create_task(self.send_find(unique_id,p, True, for_peer=self.peer.id_node))
-                    # self.connection_approval(p.addr,p,self.add_peer,self.ban_peer)
-                elif self.warmup < 60:
-                    other = self.bucket_manager.get_smallest_bucket().to_bytes(32, byteorder = "big")
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(self.send_find(unique_id,p, True, for_peer=other))
+                    msg = bytearray([KademliaDiscovery.ASK_FOR_ID])
+                    loop.create_task(self._lower_sendto(msg,p.addr))
+            if self.finders.get(unique_id) != None:
+                self.finders[unique_id].add_peer(peers)
+                msg = bytearray([KademliaDiscovery.FIND if self.finders[unique_id].look_for != self.peer.id_node else KademliaDiscovery.FIND ^ 1])
+                msg += unique_id
+                msg += self.finders[unique_id].look_for
+                l = self.finders[unique_id].find_peer()
+                loop = asyncio.get_running_loop()
+                for p in l:
+                    print("sending to ", p.pub_key)
+                    loop.create_task(self._lower_sendto(msg, p.addr))
+
                     
         
             
@@ -282,9 +301,10 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         if not isinstance(id, bytes):
             id = SHA256(id)
         msg += id
-        l = self.bucket_manager.get_closest(id,5)
-        print(self.peer.pub_key,"we found a list of", len(l), id)
         
+        
+        self.finders[unique_id] = Finder(id, self.bucket_manager.get_closest(id,5), 5)
+        l = self.finders[unique_id].find_peer()
         for p in l:
             print("sending to ", p.pub_key)
             await self._lower_sendto(msg, p.addr)
