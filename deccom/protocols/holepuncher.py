@@ -16,6 +16,7 @@ class HolePuncher(AbstractProtocol):
         
     
     def heard_from(self,add1, add2):
+        print("adding", add2)
         if self.heard_data.get(add2) == None:
             self.heard_data[add2] = []
         self.heard_data[add2].append(add1)
@@ -40,14 +41,14 @@ class HolePuncher(AbstractProtocol):
             msg += addr[1].to_bytes(2, byteorder="big")
             l_their = int.from_bytes(data[1:5], byteorder="big")
             ip_their = data[5:5+l_their].decode(encoding="utf-8")
-            p_their = data[5+l_their: 7+l_their]
+            p_their = int.from_bytes(data[5+l_their: 7+l_their], byteorder="big")
         
-            loop.create_task(self._lower_sendto(msg,(ip_their, p_their)))
+            loop.create_task(self._lower_sendto(bytes(msg),(ip_their, p_their)))
             return
         elif data[0] == HolePuncher.INFORM_RELAY:
             l_their = int.from_bytes(data[1:5], byteorder="big")
             ip_their = data[5:5+l_their].decode(encoding="utf-8")
-            p_their = data[5+l_their: 7+l_their]
+            p_their = int.from_bytes(data[5+l_their: 7+l_their], byteorder="big")
             loop = asyncio.get_event_loop()
             loop.create_task(self._lower_sendto(b'',(ip_their, p_their)))
             return
@@ -67,7 +68,7 @@ class HolePuncher(AbstractProtocol):
                 
         loop = asyncio.get_event_loop()
         loop.create_task(self._lower_sendto(msg,self.heard_data[addr][-1]))
-        loop.call_later(5,
+        loop.call_later(10,
                                       self.timeout, addr)
     async def sendto(self, msg, addr):
         if addr not in self.successful and self.heard_data.get(addr) != None:
@@ -75,7 +76,7 @@ class HolePuncher(AbstractProtocol):
             if self.outstanding.get(addr) == None:
                 self.outstanding[addr] = (3,[msg])
                 loop = asyncio.get_event_loop()
-                loop.call_later(5,
+                loop.call_later(10,
                                       self.timeout, addr)
                 msg = bytearray([HolePuncher.REQUEST_RELAY])
                 baddrs = addr[0].encode("utf-8")
@@ -83,8 +84,9 @@ class HolePuncher(AbstractProtocol):
                 msg += baddrs
                 msg += addr[1].to_bytes(2, byteorder="big")
                 for add in self.heard_data.get(addr):
-                    await self._lower_sendto(msg,add)
+                    await self._lower_sendto(bytes(msg),add)
             else:
+                print(self.outstanding[addr])
                 self.outstanding[addr] = (self.outstanding[addr][0], self.outstanding[addr][1].append(msg))
         else:
             await self._lower_sendto(msg,addr)
