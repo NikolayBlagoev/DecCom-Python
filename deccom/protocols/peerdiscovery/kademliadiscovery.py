@@ -121,7 +121,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 
             if self.bucket_manager.get_peer(other.id_node) != None:
 
-                self.bucket_manager.update_peer( other.id_node, other)
+                self.bucket_manager.update_peer(other.id_node, other)
             else:
                 self.connection_approval(addr,other,self.add_peer,self.ban_peer)
 
