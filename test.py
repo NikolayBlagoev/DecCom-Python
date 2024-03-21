@@ -1,15 +1,18 @@
 import asyncio
 from deccom.nodes import StreamNode, Node
 from deccom.protocols.abstractprotocol import AbstractProtocol
+from deccom.protocols.holepuncher import HolePuncher
 from deccom.protocols.peerdiscovery.kademliadiscovery import KademliaDiscovery
 from deccom.protocols.securityprotocols import Noise
 from deccom.protocols.defaultprotocol import DefaultProtocol
 from deccom.peers import Peer
 from deccom.protocols.streamprotocol import StreamProtocol
 protocol = DefaultProtocol()
-discovery = KademliaDiscovery()
-discovery.set_lower(protocol)
-
+holepuncher = HolePuncher()
+holepuncher.set_lower(protocol)
+discovery = KademliaDiscovery(interval=5)
+discovery.set_lower(holepuncher)
+discovery.bootstrap_peers.append(Peer(("164.92.217.73", 10015)))
 peer = Peer(None)
 
 me = Node(peer, discovery,"0.0.0.0", 10015)

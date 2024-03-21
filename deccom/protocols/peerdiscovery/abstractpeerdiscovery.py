@@ -50,7 +50,10 @@ class AbstractPeerDiscovery(AbstractProtocol):
     @bindfrom("disconnected_callback")
     def remove_peer(self, addr: tuple[str, int], node_id: bytes):
         self.disconnected_callback(addr, node_id)
-
+    
+    @bindto("heard_from")
+    def _lower_heard_from(self, addr_from: tuple[str, int], addr_of: tuple[str, int]):
+        return
     
     def set_approve_connection(self, callback):
         self.connection_approval = callback

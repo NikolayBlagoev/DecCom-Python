@@ -20,6 +20,7 @@ class Peer(object):
         self.pub_key = pub_key
         self.addr = addr
         self.tcp = tcp
+        # self.heard_from = None
         # if proof_of_self != None:
         #     proof_of_self = SHA256([pub_key,addr[0],addr[1],])
         # print("pub_key",pub_key)

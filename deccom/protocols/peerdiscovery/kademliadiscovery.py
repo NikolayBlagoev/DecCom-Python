@@ -46,7 +46,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         loop.create_task(self._refresh_table())
 
     async def _refresh_table(self):
-        # print("refreshing")
+        print("refreshing")
         loop = asyncio.get_running_loop()
         if len(self.bucket_manager.buckets) == 1 and len(self.bucket_manager.buckets[0].peers) == 0:
             print("i dont know anyone still")
@@ -63,15 +63,17 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         while self.searches.get(unique_id) != None:
             unique_id = os.urandom(8)
         if self.warmup == 0:
-            rand_ids = [self.peer.id_node]
             
-            self.finders[unique_id] = Finder(self.peer.id_node, self.bucket_manager.get_closest(rand_ids[0],3), 3)
+            print("looking for myself", self.peer.id_node)
+            self.finders[unique_id] = Finder(self.peer.id_node, self.bucket_manager.get_closest(self.peer.id_node,3), 3)
             l = self.finders[unique_id].find_peer()
+            self.warmup+=1
             for p in l:
                 msg = bytearray([KademliaDiscovery.FIND ^ 1])
                 msg += unique_id
-                msg += rand_ids[0]
+                msg += self.peer.id_node
                 await self._lower_sendto(msg,p.addr)
+            self.refresh_loop = loop.call_later(self.interval, self.refresh_table)
             return
 
         ret = self.bucket_manager.get_buckets_not_updated(self.interval)
@@ -157,7 +159,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 self.send_find_response(addr,closest_peers,unique_id)
         
         elif data[0] == KademliaDiscovery.RESPOND_FIND:
-            print(self.peer.pub_key,"got a response",addr)
+            # print(self.peer.pub_key,"got a response",addr)
             i = 1
             unique_id = data[i:i+8]
             i+=8
@@ -179,6 +181,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 for p in peers:
                     if p.id_node == self.searches.get(unique_id) and p.id_node != self.peer.id_node:
                         # print("oh he in here!")
+                        
                         loop = asyncio.get_running_loop()
                         loop.create_task(self.introduce_to_peer(p))
                         msg = bytearray([KademliaDiscovery.FIND])
@@ -192,6 +195,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                     
                 
             for p in peers:
+                self._lower_heard_from(addr, p.addr)
                 if self.bucket_manager.get_peer(p.id_node) == None and p.id_node != self.peer.id_node:
                     loop = asyncio.get_running_loop()
                     loop.create_task(self.introduce_to_peer(p))
