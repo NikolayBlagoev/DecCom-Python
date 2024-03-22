@@ -8,6 +8,8 @@ from deccom.protocols.abstractprotocol import AbstractProtocol
 class HolePuncher(AbstractProtocol):
     REQUEST_RELAY = int.from_bytes(b'\xff', byteorder="big")
     INFORM_RELAY = int.from_bytes(b'\x43', byteorder="big")
+    INFORM_EXTERNAL = int.from_bytes(b'\x13', byteorder="big")
+    REQUEST_EXTERNAL = int.from_bytes(b'\x23', byteorder="big")
     def __init__(self, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = ...):
         super().__init__(submodule, callback)
         self.heard_data = dict()
@@ -16,7 +18,7 @@ class HolePuncher(AbstractProtocol):
         
     
     def heard_from(self,add1, add2):
-        print("adding", add2)
+        #print("adding", add2)
         if self.heard_data.get(add2) == None:
             self.heard_data[add2] = []
         self.heard_data[add2].append(add1)
@@ -86,6 +88,7 @@ class HolePuncher(AbstractProtocol):
                 msg += len(baddrs).to_bytes(4, byteorder="big")
                 msg += baddrs
                 msg += addr[1].to_bytes(2, byteorder="big")
+                await self._lower_sendto(b'\x01',addr)
                 for add in self.heard_data.get(addr):
                     await self._lower_sendto(bytes(msg),add)
             else:
