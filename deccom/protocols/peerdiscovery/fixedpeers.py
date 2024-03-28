@@ -39,14 +39,14 @@ class FixedPeers(AbstractPeerDiscovery):
             loop.create_task(self.introduction(a))
     async def introduction(self, addr):
         msg = bytearray([1])
-        print("introducing to ",addr)
+        # print("introducing to ",addr)
         await self._lower_sendto(msg, addr)
     def process_datagram(self, addr: tuple[str, int], data: bytes):
         
         if self.a_to_p.get(addr) == None:
             return
         if not addr in self.introduced:
-            print("new peer MET!",addr)
+            # print("new peer MET!",addr)
             self.introduced.append(addr)
             
             if self.peer_crawls.get(self.a_to_p.get(addr)) != None:

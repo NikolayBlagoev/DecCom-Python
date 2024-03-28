@@ -1,4 +1,5 @@
 from socket import socket
+from concurrent.futures import ThreadPoolExecutor
 def find_open_port():
     ret = 10010
     with socket() as s:
@@ -12,3 +13,6 @@ def ternary_comparison(b1,b2):
     if b1 < b2:
         return -1
     return 0
+
+def get_executor(max_workers = 5):
+    return ThreadPoolExecutor(max_workers=max_workers)

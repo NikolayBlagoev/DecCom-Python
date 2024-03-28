@@ -12,6 +12,8 @@ from trainingprotocol import TrainingProtocol
 from task_datasets.qqp import get_glue_qqp_train_data_loader
 from task_datasets.tokenizer import build_tokenizer
 n_epochs = 3
+world_size = int(argv[2])
+pipeline_size = int(argv[3])
 batch_size_train = 16
 batch_size_test = 1000
 learning_rate = 0.01
@@ -90,13 +92,20 @@ gossip.set_lower(protocol)
 stream = StreamProtocol(False)
 stream.set_lower(gossip)
 net = None
+loss_fn = None
+get_data = None
 n = Peer(("127.0.0.1", 10015), pub_key="1")
+def extract_data(loader):
+    i, ret = next(loader)
+    return ret['text'], ret['text']
 if argv[1] == "0" or argv[1] == "3":
     tokenizer, leng = build_tokenizer()
-    train_loader = get_glue_qqp_train_data_loader(tokenizer)
+    train_loader = enumerate(get_glue_qqp_train_data_loader(tokenizer))
     if argv[1]!="0":
         gossip.bootstrap_peers.append(n)
     net = GPTStageFirst(1024,tokenizer.vocab_size, 2, "cpu")
+    loss_fn = net.task_layer
+    get_data = lambda: extract_data(train_loader)
 elif argv[1] == "1" or argv[1] == "4":
     gossip.bootstrap_peers.append(n)
     tokenizer, leng = build_tokenizer()
@@ -109,7 +118,19 @@ elif argv[1] == "2" or argv[1] == "5":
 
 optimizer = optim.SGD(net.parameters(), lr=learning_rate,
                       momentum=momentum)
-training = TrainingProtocol(3,3,int(argv[1]),net,optimizer,train_loader)
+rank = int(argv[1])
+next_node = SHA256(str(rank + 1))
+prev_node = SHA256(str(rank - 1))
+if rank % pipeline_size == 0:
+    prev_node = SHA256(str(rank + pipeline_size - 1))
+if rank % pipeline_size == pipeline_size - 1:
+    next_node = SHA256(str(rank - pipeline_size + 1))
+dp_group = [SHA256(str(rank))]
+tmp = (rank + pipeline_size) % world_size
+while tmp != rank:
+    dp_group.append(SHA256(str(tmp)))
+    tmp = (tmp + pipeline_size) % world_size
+training = TrainingProtocol(world_size,pipeline_size,int(argv[1]),net,optimizer,next_node,prev_node,dp_group=dp_group, max_iterations = 20, loss_fn= loss_fn, get_data=get_data)
 training.set_lower(stream)
 peer = Peer(None, None, pub_key=argv[1])
 me = TrainingNode(peer, training,"127.0.0.1", 10015 if argv[1] == "0" else None)

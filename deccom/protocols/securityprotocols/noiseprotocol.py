@@ -41,7 +41,13 @@ class Noise(AbstractProtocol):
         self.awaiting_approval: dict[tuple[tuple[str,int],bytes], tuple[int, Peer, tuple[str,int], Callable, Callable]] = dict()
         self.approved_connections: dict[tuple[tuple[str,int],bytes], Peer] = dict()
         self.keys: dict[tuple[str,int], tuple[ChaCha20Poly1305,Peer]] = dict()
+    def get_al(self, addr: tuple[str,int]):
+        # print(self.keys)
+        if self.keys.get(addr) == None:
+            return None
+        return self.keys[addr][1]
     def process_datagram(self, addr: tuple[str, int], data: bytes):
+        # print("datagram")
         if data[0] == Noise.CHALLENGE:
             print("CHALLENGE FROM")
             other, i = Peer.from_bytes(data[1:])
@@ -91,20 +97,24 @@ class Noise(AbstractProtocol):
             self.keys[addr] = (ChaCha20Poly1305(shared),other)
             success(addr,other)
         elif data[0] == Noise.FALLTHROUGH or data[0] ^ Noise.FALLTHROUGH == 64 or data[0] ^ Noise.FALLTHROUGH == 192:
+            # print("fall through")
             strategy = data[0] ^ Noise.FALLTHROUGH
             if strategy == 0:
-                strategy == "plaintext"
+                strategy = "plaintext"
             elif strategy == 192:
-                strategy == "chacha"
+                strategy = "chacha"
             elif strategy == 64:
-                strategy == "sign_only" 
+                strategy = "sign_only" 
             if self.strict and self.encryption_mode != strategy:
+                print("i am strict")
                 return
+            # print(strategy, isinstance(strategy, int))
             
             
 
             if strategy == "plaintext":
-                self.callback(addr,data[1:])
+                # print("received msg")
+                return self.callback(addr,data[1:])
             elif strategy == "sign_only":
                 if len(data) < 66:
                     return
@@ -144,19 +154,22 @@ class Noise(AbstractProtocol):
         self.awaiting_approval[(addr,peer.id_node)] = (shared,peer,addr,success,failure)
         loop.create_task(self._lower_sendto(msg,addr))
         
-
+    async def broadcast(self, msg):
+        for k,v in self.keys.items():
+            await self.sendto(msg, k)
     async def sendto(self, msg, addr):
         prepend = Noise.FALLTHROUGH
         tmp = bytearray([])
         if self.encryption_mode == "plaintext":
             # prepend = prepend ^ b'00000000'
-            tmp += bytes(prepend)
+            # print("sending to plaintex")
+            tmp += prepend.to_bytes(1, byteorder="big")
             tmp += msg
             return await self._lower_sendto(tmp, addr)
         elif self.encryption_mode == "chacha":
             if self.keys.get(addr) == None:
                 raise Exception("NO AUTHENTICATED CONNECTION")
-            prepend = bytes(prepend ^ b'11000000')
+            prepend = (prepend ^ b'11000000').to_bytes(1, byteorder="big")
             tmp += prepend
             aed = self.keys[addr][0]
             nonce = urandom(12)
@@ -167,7 +180,7 @@ class Noise(AbstractProtocol):
 
         elif self.encryption_mode == "sign_only":
             prepend = prepend ^ b'01000000'
-            tmp += bytes(prepend)
+            tmp += prepend.to_bytes(1, byteorder="big")
             tmp+= sign(self.peer.key,SHA256(msg))
             tmp += msg
             return await self._lower_sendto(tmp, addr)
@@ -178,7 +191,7 @@ class Noise(AbstractProtocol):
         and self.approved_connections.get((addr,peer.id_node)).addr[0] == peer.addr[0] \
         and self.approved_connections.get((addr,peer.id_node)).addr[1] == peer.addr[1]:
             return success(addr,peer)
-            
+        
         if self.awaiting_approval.get((addr,peer)) != None:
             print("already waiting")
             return
@@ -187,6 +200,8 @@ class Noise(AbstractProtocol):
             return failure(addr,peer)
         
         if not self.strict:
+            self.keys[addr] = (None, peer)
+            # print("approved")
             return success(addr,peer)
         
         if addr[0] != peer.addr[0] or addr[1] != peer.addr[1]:

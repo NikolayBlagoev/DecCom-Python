@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any, Callable
 from deccom.peers.peer import Peer
 from deccom.protocols.defaultprotocol import DefaultProtocol
@@ -81,7 +82,10 @@ class AbstractProtocol(object):
         self.submodule = submodule
         self.callback = callback
         self._taken = dict()
-        
+        self.loop = asyncio.get_event_loop()
+    
+    def get_loop(self):
+        return self.loop
     
     @bindfrom("callback")    
     def process_datagram(self, addr:tuple[str,int],data:bytes):

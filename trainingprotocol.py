@@ -23,47 +23,33 @@ class TrainingProtocol(AbstractProtocol):
         ["find_peer", "set_stream_callback",
             "open_connection", "send_stream", "get_peer"]
 
-    def __init__(self, world_size, pipeline_size, rank, net, optimizer, dataloader=None, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = lambda : ...):
+    def __init__(self, world_size, pipeline_size, rank, net, optimizer, next, previous, dp_group, max_iterations = -1, microbatches = 1, loss_fn = None, get_data=None, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = lambda : ...):
         assert world_size % pipeline_size == 0
         super().__init__(submodule, callback)
         self.world_size = world_size
         self.pipeline_size = pipeline_size
         self.rank = rank
         self.time_start = None
-        # dp_group to communicate with
-        self.dp_group = []
-
+        self.microbatches = microbatches
+        self.dp_group = dp_group
+        self.next = next
+        self.prev = previous
         self.pipeline = rank // pipeline_size
         self.pipeline_rank = rank % pipeline_size
-        
+        self.max_iterations = max_iterations
         if self.pipeline_rank == 0:
-            assert dataloader != None
-            self.dataloader = enumerate(dataloader)
-            self.next = SHA256(str(self.rank + 1))
-            self.prev = SHA256(str(self.rank + self.pipeline_size - 1))
-        elif self.pipeline_rank == self.pipeline_size - 1:
-            self.next = SHA256(str(self.rank - self.pipeline_size + 1))
-            self.prev = SHA256(str(self.rank-1))
-        else:
-            self.prev = SHA256(str(self.rank - 1))
-            self.next = SHA256(str(self.rank + 1))
-
-        dp_member = self.rank
-        self.dp_group.append(SHA256(str(dp_member)))
-        dp_member = (dp_member + pipeline_size) % world_size
-        while dp_member != self.rank:
-            self.dp_group.append(SHA256(str(dp_member)))
-            dp_member = (dp_member + pipeline_size) % world_size
-            
-        # self._lower_find_peer = lambda: ...
-        # self._lower_open_connection = lambda: ...
-        # self._lower_send_stream = lambda: ...
-        # self._lower_get_peer = lambda: ...
+            assert get_data != None
+            assert loss_fn != None
+            self.loss_fn = loss_fn
+            self.get_data = get_data
+        
+        
         self.net: nn.Module = net
         self.sizes = []
         self.len_sizes = []
         for param in self.net.parameters():
             self.sizes.append(param.shape)
+            self.len_sizes.append(len(param.view(-1)))
         self.optimizer = optimizer
         self.buffer_in = dict()
         self.buffer_out = dict()
@@ -89,19 +75,29 @@ class TrainingProtocol(AbstractProtocol):
     async def start(self, p: Peer):
         await super().start(p)
         if self.pipeline_rank == 0: 
+            self.start_iteration()
+    def start_iteration(self):
+
+        assert self.pipeline_rank == 0
+        ttl = (datetime.now() - self.time_start).total_seconds()
+        print(ttl)
+        self.time_start = datetime.now()
+        for _ in range(self.microbatches):
             try:
-                    self.time_start = datetime.now()
-                    batch_idx, ret = next(self.dataloader)
-                    data = ret['text']
-                    target = ret['text']
-                    print(data.shape, target.shape)
-            except StopIteration :
+                if self.iter == self.max_iterations:
                     print("TRAINING COMPLETE")
                     return
-                
-            new_seq_id = os.urandom(8)
+                self.time_start = datetime.now()
+                data, target = self.get_data()
+                    
+                    
+            except StopIteration :
+                print("TRAINING COMPLETE")
+                return
+                    
+            new_seq_id = os.urandom(4)
             while self.buffer_out.get(new_seq_id) != None:
-                    new_seq_id = os.urandom(8)
+                new_seq_id = os.urandom(4)
             self.buffer_in[new_seq_id] = target
             ret = TrainingProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
             ret.retain_grad()
@@ -109,6 +105,9 @@ class TrainingProtocol(AbstractProtocol):
             self.buffer_out[new_seq_id] = ret
             loop = asyncio.get_running_loop()
             loop.create_task(self.send_stream(self.next,pickle.dumps(ret),seqdata=new_seq_id))
+
+
+    
     def _apply_grad(self):
         # print("applyinb back")
         self.iter += 1
@@ -124,13 +123,13 @@ class TrainingProtocol(AbstractProtocol):
         self.aggregation = []
     @bindfrom("stream_callback")
     def process_data(self, data:bytes, nodeid, addr):
-        seq_id = bytes(data[0:8])
+        seq_id = bytes(data[0:4])
         
-        data=pickle.loads(data[8:])
+        data=pickle.loads(data[4:])
         peer: Peer = self._lower_get_peer(nodeid)
         if nodeid == self.prev:
             if self.pipeline_rank == 0:
-                loss = self.net.task_layer(data,self.buffer_in.get(seq_id))
+                loss = self.loss_fn(data,self.buffer_in.get(seq_id))
                 
                 loss.backward()
                 if self.iter % 100 == 0:
@@ -147,20 +146,16 @@ class TrainingProtocol(AbstractProtocol):
                 loop = asyncio.get_running_loop()
                 loop.create_task(self.send_stream(self.next,pickle.dumps(ret),seqdata=seq_id))
                 
-                
-                
         elif nodeid == self.next:
             if self.pipeline_rank == 0:
                 TrainingProtocol.train(self.net,self.optimizer, inp_batch=self.buffer_out.get(seq_id),output=data, rank = 0, stage = -1)
                 tmp = []
-                self.len_sizes = []
+                
                 for param in self.net.parameters():
                     if param.grad == None:
                         tmp.append(zeros_like(param.view(-1)))
                     else:
                         tmp.append(param.grad.view(-1))
-                    
-                    self.len_sizes.append(len(tmp[-1]))
                 loop = asyncio.get_running_loop()
                 self.prev_grad = cat(tmp)
                 for peer in self.dp_group:
@@ -170,42 +165,22 @@ class TrainingProtocol(AbstractProtocol):
                     
                 self.aggregation.append(self.prev_grad)
                 # print("calculating\n\n\n\n",len(self.dp_group))
-                if len(self.aggregation) == len(self.dp_group):
+                del self.buffer_in[seq_id]
+                del self.buffer_out[seq_id]
+                if len(self.aggregation) == self.microbatches * len(self.dp_group):
                     self._apply_grad()
                     # print("\n\n\n\ncalculated")
-                    try:
-                        ttl = (datetime.now() - self.time_start).total_seconds()
-                        print(ttl)
-                        self.time_start = datetime.now()
-                        batch_idx, ret = next(self.dataloader)
-                        data = ret['text']
-                        target = ret['text']
-                        if self.iter == 20:
-                            return
-                    except StopIteration :
-                        print("TRAINING COMPLETE")
-                        return
-                    del self.buffer_in[seq_id]
-                    del self.buffer_out[seq_id]
-                    new_seq_id = os.urandom(8)
-                    while self.buffer_out.get(new_seq_id) != None:
-                        new_seq_id = os.urandom(8)
-                    self.buffer_in[new_seq_id] = target
-                    ret = TrainingProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
-                    ret.retain_grad()
-                    self.buffer_out[new_seq_id] = ret
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(self.send_stream(self.next,pickle.dumps(ret),seqdata=new_seq_id))
+                    self.start_iteration()
             else:
                 ret = TrainingProtocol.train(self.net, self.optimizer, inp_batch=self.buffer_out.get(seq_id), output=data, rank = self.pipeline_rank, stage = -1)
                 # print(ret)
                 loop = asyncio.get_running_loop()
                 loop.create_task(self.send_stream(self.prev,pickle.dumps(self.buffer_in.get(seq_id).grad),seqdata=seq_id))
                 tmp = []
-                self.len_sizes = []
+                
                 for param in self.net.parameters():
                     tmp.append(param.grad.view(-1))
-                    self.len_sizes.append(len(tmp[-1]))
+                    
                 loop = asyncio.get_running_loop()
                 self.prev_grad = cat(tmp)
                 for peer in self.dp_group:
@@ -215,39 +190,17 @@ class TrainingProtocol(AbstractProtocol):
                     
                 self.aggregation.append(self.prev_grad)
                 # print("calculating\n\n\n\n",len(self.dp_group))
-                if len(self.aggregation) == len(self.dp_group):
+                if len(self.aggregation) == self.microbatches * len(self.dp_group):
                     self._apply_grad()
                 del self.buffer_in[seq_id]
                 del self.buffer_out[seq_id]
         elif nodeid in self.dp_group:
             self.aggregation.append(data)
             # pprint("collecting...")
-            if len(self.aggregation) == len(self.dp_group):
+            if len(self.aggregation) == self.microbatches * len(self.dp_group):
                 self._apply_grad()
                 if self.pipeline_rank == 0:
-                    try:
-                        ttl = (datetime.now() - self.time_start).total_seconds()
-                        print(ttl)
-                        self.time_start = datetime.now()
-                        batch_idx, ret = next(self.dataloader)
-                        data = ret['text']
-                        target = ret['text']
-                        if self.iter == 20:
-                            return
-                    except StopIteration :
-                        print("TRAINING COMPLETE")
-                        return
-                    new_seq_id = os.urandom(8)
-                    while self.buffer_out.get(new_seq_id) != None:
-                        new_seq_id = os.urandom(8)
-                    self.buffer_in[new_seq_id] = target
-                    ret = TrainingProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
-                    ret.retain_grad()
-                    self.buffer_out[new_seq_id] = ret
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(self.send_stream(self.next,pickle.dumps(ret),seqdata=new_seq_id))
- 
-
+                    self.start_iteration()
         return
 
     async def send_stream(self, node_id, data, seqdata=b''):

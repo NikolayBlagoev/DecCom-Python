@@ -1,7 +1,10 @@
 import asyncio
+import traceback
 from typing import Any, Callable
 import os
 
+from deccom.peers.peer import Peer
+from deccom.utils.common import get_executor
 
 class DefaultProtocol(asyncio.DatagramProtocol):
     PING_b = b'\xd4'
@@ -13,8 +16,12 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         self.callback = callback
         self.pings = dict()
         self._taken = dict()
+        self.executor = get_executor()
+        self.loop = asyncio.get_event_loop()
         
-
+        
+    def get_loop(self):
+        return self.loop
     def connection_made(self, transport):
         self.transport = transport
         
@@ -34,11 +41,21 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         elif data[0] == DefaultProtocol.PONG:
             loop.create_task(self.handle_pong(addr,data[1:]))
         else:
-            loop.create_task(self.call_callback(addr,data[1:]))
+            # print("running")
+            asyncio.run_coroutine_threadsafe(self.call_callback(addr,data[1:]), loop)
     async def call_callback(self, addr,data):
-        self.callback(addr,data)
+        with open(f"log{self.p.pub_key}.txt", "a") as log:
 
-    async def start(self, *args):
+            try:
+                #
+                self.callback(addr,data)
+            except Exception:
+                traceback.print_exc(file=log)
+                
+       
+
+    async def start(self, p: Peer, *args):
+        self.p = p
         return
     def timeout(self, addr, error, msg_id):
         if self.pings.get(msg_id) is None:
@@ -86,7 +103,7 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         return super().connection_lost(exc)
     
     async def sendto(self,msg,addr):
-        # print("sending to",addr)
+        # print("sending to",addr,msg)
         trmp = bytearray(b'\x01')
         trmp = trmp + msg
         self.transport.sendto(trmp, addr=addr)

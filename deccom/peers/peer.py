@@ -69,7 +69,8 @@ class Peer(object):
         return writer.bytes()
 
     @staticmethod
-    def from_bytes(b: bytes):
+    def from_bytes(b: bytes) -> tuple["Peer", int]:
+        # print(len(b))
         reader = byte_reader(b)
 
         id_node = reader.read_next_variable(4)

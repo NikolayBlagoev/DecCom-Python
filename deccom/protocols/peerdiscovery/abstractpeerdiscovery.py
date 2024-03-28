@@ -35,6 +35,7 @@ class AbstractPeerDiscovery(AbstractProtocol):
         self.connected_callback = connected_callback
         self.connection_approval: Callable[[tuple[str,int], Peer, Callable[[tuple[str,int],Peer],None], Callable[[tuple[str,int],Peer],None], AbstractProtocol],None] = lambda addr, peer, success, failure: self.add_peer(addr,peer)
         self.peers: dict[bytes, Peer] = dict()
+        
     
     def set_connected_callback(self, callback: Callable[[Peer], None]):
         self.connected_callback = callback

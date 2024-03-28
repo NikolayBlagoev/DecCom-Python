@@ -150,7 +150,7 @@ class Arpegio(AbstractProtocol):
                     self.reject_proposal(addr,self.max_cost, self.stage)
                     return
                 else:
-                    if True:
+                    if them > self.peer.id_node:
                         self.reject_proposal(addr,self.max_cost, self.stage)
                         return
                     else:

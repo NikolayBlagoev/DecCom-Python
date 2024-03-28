@@ -10,8 +10,9 @@ from deccom.peers.peer import Peer
 import struct
 from os import urandom
 from deccom.protocols.abstractprotocol import AbstractProtocol
-from flownode import *
-class FlowProtocol(AbstractProtocol):
+from flownode_ss import *
+# flowprotocol ONLY for a source-sink (since they are equivalent)
+class FlowProtocolSS(AbstractProtocol):
     INTRODUCTION = int.from_bytes(b'\xb3', byteorder="big") #Nimzo-Larsen Attack
     FLOW_REQUEST = int.from_bytes(b'\xe5', byteorder="big")
     FLOW_RESPONSE = int.from_bytes(b'\xb2', byteorder="big")
@@ -34,7 +35,7 @@ class FlowProtocol(AbstractProtocol):
         self.iteration = 0 
         self.iterationsss = []
 
-        self.flow_node = FlowNode(flow,minflow,maxflow,capacity,stage)
+        self.flow_node = FlowNode_SS(flow,minflow,maxflow,capacity,stage)
         self.stage = stage
         self.attempts = 0
         self.max_stage = max_stage
@@ -42,14 +43,14 @@ class FlowProtocol(AbstractProtocol):
         self.costmap = costmap
         self.T = 2
         self.idles_with_flow = 10
-        self.idles_with_outflow = 10
         self.checked = dict()
 
 
     async def start(self, p : Peer):
         await super().start(p)
-        if self.stage == self.max_stage:
+        if self.stage == 0:
             self.flow_node.targets[self.peer.id_node] = 0
+        self.flow_node.myid = self.peer.id_node
         self.periodic()
         print(self.peer.pub_key,"starting ")
     
@@ -63,7 +64,7 @@ class FlowProtocol(AbstractProtocol):
         if p == None:
             print("unknown peer")
             return
-        if data[0] == FlowProtocol.INTRODUCTION:
+        if data[0] == FlowProtocolSS.INTRODUCTION:
             # print("peer introducing", addr)
             desired_flow = int.from_bytes(data[1:9], byteorder="big", signed=True)
             stage = int.from_bytes(data[9:17], byteorder="big")
@@ -89,29 +90,34 @@ class FlowProtocol(AbstractProtocol):
 
             elif stage == self.stage:
                 self.flow_node.same[p.id_node] = SamePeer(p)
-        elif data[0] == FlowProtocol.INTRODUCTION + 1:
+        elif data[0] == FlowProtocolSS.INTRODUCTION + 1:
             # print("Introducing to", p.addr)
-            msg = bytearray([FlowProtocol.INTRODUCTION])
-            msg += self.flow_node.desired_flow.to_bytes(8, byteorder="big", signed=True)
-            msg += self.stage.to_bytes(8, byteorder="big")
-            loop = asyncio.get_running_loop()
-            loop.create_task(self._lower_sendto(msg, p.addr))
-        elif data[0] == FlowProtocol.FLOW_REQUEST:
+            if self.flow_node.next.get(p.id_node) != None:
+                msg = bytearray([FlowProtocolSS.INTRODUCTION])
+                msg += self.flow_node.desired_flow_source.to_bytes(8, byteorder="big", signed=True)
+                msg += self.stage.to_bytes(8, byteorder="big")
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._lower_sendto(msg, p.addr))
+            else:
+                msg = bytearray([FlowProtocolSS.INTRODUCTION])
+                msg += self.flow_node.desired_flow_sink.to_bytes(8, byteorder="big", signed=True)
+                msg += self.stage.to_bytes(8, byteorder="big")
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._lower_sendto(msg, p.addr))
+        elif data[0] == FlowProtocolSS.FLOW_REQUEST:
             print("received request from ",p.pub_key)
             mnstg = int.from_bytes(data[1:9], byteorder="big")
             target = data[9:41]
             cost = struct.unpack(">f", data[41:45])[0]
             theirid = data[45:49] # their flow id
             cst_to_me = struct.unpack(">f", data[49:53])[0]
-            if self.requested_flows != None:
-                return self.reject_flow(addr,theirid,target)
-
-            if mnstg != self.stage: # WRONG STAGE
+            
+            if mnstg % self.max_stage != self.stage: # WRONG STAGE
                 print("wrong stage")
                 return self.reject_flow(addr,theirid,target)
             if self.flow_node.prev.get(p.id_node) == None:
                 loop = asyncio.get_event_loop()
-                msg = bytearray([FlowProtocol.INTRODUCTION + 1])
+                msg = bytearray([FlowProtocolSS.INTRODUCTION + 1])
                 loop.create_task(self._lower_sendto(msg, p.addr))
             if self.flow_node.targets.get(target) == None: # UNKNOWN
                 print("dont know taget")
@@ -121,30 +127,29 @@ class FlowProtocol(AbstractProtocol):
                 print("wrong cost",cost,self.flow_node.targets[target])
                 return self.reject_flow(addr,theirid,target) 
 
-            if self.flow_node.desired_flow >= 0: # CANT TAKE THIS ANYMORE
+            if self.flow_node.desired_flow_sink >= 0: # CANT TAKE THIS ANYMORE
                 print("CANT TAKE")
                 return self.reject_flow(addr,theirid,target)
             if self.flow_node.inflow.get(p.id_node) != None and self.flow_node.inflow[p.id_node].get(theirid) != None:
                 return
+            #print("we dont have", p.id_node, theirid)
             with open(f"log{self.peer.pub_key}.txt", "a") as log:
                 log.write(f"flow given to {p.pub_key}\n")
             self.flow_node.add_inflow(p.id_node, theirid, target, cst_to_me)
             self.accept_flow(addr, theirid, target,cost)
-            msg = self.flow_node.construct_update_message(FlowProtocol.QUERY_FLOWS)
-            loop = asyncio.get_event_loop()
-            loop.create_task(self._lower_broadcast(msg))
-        elif data[0] == FlowProtocol.CHECK_FLOW:
+            
+        elif data[0] == FlowProtocolSS.CHECK_FLOW:
             theirid = data[1:5]
             if self.flow_node.prev.get(p.id_node) != None:
                 if self.flow_node.inflow.get(p.id_node) == None or self.flow_node.inflow[p.id_node].get(theirid) == None:
-                    msg = bytearray([FlowProtocol.PUSH_BACK_FLOW])
+                    msg = bytearray([FlowProtocolSS.PUSH_BACK_FLOW])
                     msg += theirid
                     loop = asyncio.get_event_loop()
                     loop.create_task(self._lower_sendto(msg, addr))
             elif self.flow_node.next.get(p.id_node) != None:
                 if self.flow_node.outflow.get(theirid) == None:
                     self.cancel_flow(theirid,p)
-        elif data[0] == FlowProtocol.FLOW_RESPONSE - 1:
+        elif data[0] == FlowProtocolSS.FLOW_RESPONSE - 1:
             print("rejection")
             stg = int.from_bytes(data[1:9],  byteorder="big")
             target = data[9:41]
@@ -160,7 +165,7 @@ class FlowProtocol(AbstractProtocol):
                 theirflow = int.from_bytes(data[49:57],  byteorder="big", signed=True)
                 self.flow_node.update_peer(p.id_node, target, cst, theirflow)
 
-        elif data[0] == FlowProtocol.FLOW_RESPONSE:
+        elif data[0] == FlowProtocolSS.FLOW_RESPONSE:
             print("they accepted")
             stg = int.from_bytes(data[1:9],  byteorder="big")
             target = data[9:41]
@@ -185,9 +190,9 @@ class FlowProtocol(AbstractProtocol):
                 cnt = 0
                 for k,v in self.flow_node.inflow.items():
                     cnt += len(v.items())
-                log.write(f"{self.flow_node.desired_flow} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}\n")
+                log.write(f"{self.flow_node.desired_flow_source} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}\n")
 
-            print("correctly at that")
+                
             ret = self.flow_node.add_outflow(mid, p.id_node, target, cst, self.costmap(self.peer.pub_key, p.pub_key))
             if not ret:
                 with open(f"log{self.peer.pub_key}.txt", "a") as log:
@@ -200,133 +205,33 @@ class FlowProtocol(AbstractProtocol):
                 cnt = 0
                 for k,v in self.flow_node.inflow.items():
                     cnt += len(v.items())
-                log.write(f"{self.flow_node.desired_flow} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}\n")
+                log.write(f"{self.flow_node.desired_flow_source} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}\n")
 
                 log.write("-----------\n")
                 
             self.requested_flows = None
             self.attempts = 0
-            self.idles_with_outflow = 10
-            msg = bytearray([FlowProtocol.CHANGE])
-            msg += self.flow_node.desired_flow.to_bytes(8, byteorder="big", signed=True)
+            msg = bytearray([FlowProtocolSS.CHANGE])
+            msg += self.flow_node.desired_flow_sink.to_bytes(8, byteorder="big", signed=True)
             msg += target
             msg += struct.pack(">f", self.flow_node.min_cost_to_target(target))
             # print("correctly at that")
             loop = asyncio.get_event_loop()
             loop.create_task(self._lower_broadcast(msg))
-            msg = self.flow_node.construct_update_message(FlowProtocol.QUERY_FLOWS)
-            loop.create_task(self._lower_broadcast(msg))
-        elif data[0] == FlowProtocol.CHANGE:
+            
+        elif data[0] == FlowProtocolSS.CHANGE:
             if self.flow_node.next.get(p.id_node) == None:
                 return
             dflow = int.from_bytes(data[1:9], byteorder="big", signed=True)
             target = data[9:41]
             cst = struct.unpack(">f", data[41:45])[0]
             self.flow_node.update_peer(p.id_node,target,cst,dflow)
-        elif data[0] == FlowProtocol.QUERY_FLOWS:
+        elif data[0] == FlowProtocolSS.QUERY_FLOWS:
             if self.flow_node.same.get(p.id_node) == None:
                 return
             self.flow_node.update_same(p.id_node, data[1:])
-        elif data[0] == FlowProtocol.PROPOSE_CHANGE:
-            theirid = data[1:5]
-            nxt_curr = data[5:37]
-            nxt_new = data[37:69]
-            target = data[69:101]
-            curr_cost = struct.unpack(">f", data[101:105])[0]
-            new_cost = struct.unpack(">f", data[105:109])[0]
-            nxt_cost = struct.unpack(">f", data[109:113])[0]
-            if self.flow_node.next.get(nxt_curr) == None or self.flow_node.next.get(nxt_new) == None:
-                self.reject_change(p.addr,theirid,nxt_curr)
-                return
-            flw_chs = None
-            for k,v in self.flow_node.outflow.items():
-                to, trgt, cst = v
-                if to == nxt_curr and trgt == target:
-                    flw_chs = k
-                    break
-            if flw_chs == None:
-                self.reject_change(p.addr,theirid,nxt_curr)
-                return
-            if self.requested_flows != None:
-                if isinstance(self.requested_flows, RequestForChange):
-                    if self.requested_flows.smp.p.id_node == p.id_node and self.requested_flows.curr_next == nxt_curr and self.requested_flows.new_next == nxt_new:
-                        if True:
-                            self.reject_change(p.addr,theirid,nxt_curr)
-                            return
-                        else:
-                            self.accept_change(p.addr, nxt_new, theirid, nxt_curr, flw_chs, nxt_cost,p.id_node,new_cost)
-                            self.requested_flows = None
-                            self.attempts = 0
-                            return
-                self.reject_change(p.addr,theirid,nxt_curr)
-                return
-            my_curr_cost = self.flow_node.next[nxt_curr].costto
-            my_new_cost = self.flow_node.next[nxt_new].costto
-            if (curr_cost + my_curr_cost) > (my_new_cost + new_cost):
-                with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                    log.write(f"accepting switch with {p.pub_key}\n")
-                self.accept_change(p.addr, nxt_new, theirid, nxt_curr, flw_chs, nxt_cost,p.id_node,new_cost)
-                return
-            elif exp(((curr_cost + my_curr_cost) - (my_new_cost + new_cost))/self.T) > random.uniform(0,1):
-                with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                    log.write(f"accepting switch with {p.pub_key}\n")
-                self.accept_change(p.addr, nxt_new, theirid, nxt_curr, flw_chs, nxt_cost,p.id_node,new_cost)
-                return
-            self.reject_change(p.addr,theirid,nxt_curr)
-            # msg += offer.my_flow
-            # msg += offer.new_next
-            # msg += offer.curr_next
-            # msg += offer.target
-
-        elif data[0] == FlowProtocol.RESPOND_CHANGE:
-            
-            myid = data[1:5]
-            their_next = data[5:37]
-            theirid = data[37:41]
-            nw_cost = struct.unpack(">f", data[41:45])[0]
-            their_new = struct.unpack(">f", data[45:49])[0]
-            if self.requested_flows == None:
-                if self._lower_get_peer(their_new) != None:
-                    self.cancel_flow(mid,self._lower_get_peer(their_new))
-                return
-            if isinstance(self.requested_flows, RequestForChange):
-                if self.requested_flows.my_flow != myid or self.requested_flows.smp.p.id_node != p.id_node or self.requested_flows.new_next != their_next:
-                    if self._lower_get_peer(their_new) != None:
-                        self.cancel_flow(mid,self._lower_get_peer(their_new))
-                    return
-                if self.flow_node.outflow.get(myid) == None:
-                    # we dont have it anymore
-                    with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                        log.write(f"WRONG CHANGE WITH {p.pub_key}\n")
-                    self.requested_flows = None
-                    self.attempts = 0
-                    if self._lower_get_peer(their_new) != None:
-                        self.cancel_flow(mid,self._lower_get_peer(their_new))
-                    return
-                # print("change accepted")
-                with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                    log.write(f"change performed with {p.pub_key}\n")
-                self.perform_change(self.requested_flows.new_next,theirid,self.requested_flows.curr_next, 
-                self.requested_flows.my_flow, their_new, p.id_node, nw_cost)
-                self.requested_flows = None
-                self.T = self.T * 0.95
-                self.attempts = 0
-                
-                self.flow_node.ignore_same(p.id_node)
-            return
-        elif data[0] == FlowProtocol.RESPOND_CHANGE - 1:
-            myid = data[1:5]
-            their_next = data[5:37]
-            
-            
-            if isinstance(self.requested_flows, RequestForChange):
-                if self.requested_flows.my_flow != myid or self.requested_flows.smp.p.id_node != p.id_node or self.requested_flows.new_next != their_next:
-                    self.requested_flows = None
-                    self.attempts = 0
-                    self.flow_node.ignore_same(p.id_node)
-                    return
-            return
-        elif data[0] == FlowProtocol.NOTIFY_CHANGE_IN_COST:
+        
+        elif data[0] == FlowProtocolSS.NOTIFY_CHANGE_IN_COST:
             flowid = data[1:5]
             cst = struct.unpack(">f",data[5:9])[0]
             #print("notified of change of cost... to", cst)
@@ -339,20 +244,20 @@ class FlowProtocol(AbstractProtocol):
                 loop = asyncio.get_event_loop()
                 prvid,prvpr = self.flow_node.map[flowid]
                 prvpr = self.flow_node.prev[prvpr]
-                msg = bytearray([FlowProtocol.NOTIFY_CHANGE_IN_COST])
+                msg = bytearray([FlowProtocolSS.NOTIFY_CHANGE_IN_COST])
                 msg += prvid
                 # print("notifying of change of cost to",new_next_cost_to_target + self.flow_node.next[their_curr].costto)
                 msg += struct.pack(">f", cst + self.flow_node.next[p.id_node].costto)
                 loop.create_task(self._lower_sendto(msg, prvpr.p.addr))
                 
             return
-        elif data[0] == FlowProtocol.NOTIFY_SWITCH:
+        elif data[0] == FlowProtocolSS.NOTIFY_SWITCH:
             curr_id = data[1:5]
             new_id = data[5:9]
             new_prv = data[9:41]
             cst = struct.unpack(">f", data[41:45])[0]
             if self.flow_node.inflow.get(p.id_node) == None or self.flow_node.inflow[p.id_node].get(curr_id) == None:
-                msg = bytearray([FlowProtocol.PUSH_BACK_FLOW])
+                msg = bytearray([FlowProtocolSS.PUSH_BACK_FLOW])
                 msg += new_id
                 loop = asyncio.get_event_loop()
                 if (self._lower_get_peer(new_prv)) != None:
@@ -360,95 +265,9 @@ class FlowProtocol(AbstractProtocol):
                 return
             self.flow_node.parent_change(curr_id, p.id_node, new_id, new_prv, cst)
             return
-        elif data[0] == FlowProtocol.PROPOSE_REDIRECT:
-            currntprv = data[1:33]
-            currnxt = data[33:65]
-            trgt = data[65:97]
-            cst_prv_their = struct.unpack(">f", data[97:101])[0]
-            cst_nxt_their = struct.unpack(">f", data[101:105])[0]
-            theirid = data[105:109]
-            assert len(theirid) == 4
-            proof = cst_prv_their + cst_nxt_their
-            if self.requested_flows != None:
-                self.reject_redirect(p.addr, currntprv, currnxt, theirid)
-                return
-            
-            
-            if self.flow_node.inflow.get(currntprv) == None:
-                self.reject_redirect(p.addr, currntprv, currnxt, theirid)
-
-                return
-            myid = None
-            
-            for k,v in self.flow_node.inflow[currntprv].items():
-                if self.flow_node.outflow.get(v[0]) != None and self.flow_node.outflow[v[0]][0] == currnxt and v[1] == trgt:
-                    myid = v[0]
-                    break
-            if myid == None:
-                self.reject_redirect(p.addr, currntprv, currnxt, theirid)
-                return
-            cstm = self.flow_node.prev[currntprv].costto + self.flow_node.next[currnxt].costto
-            if cstm > proof or exp((cstm - proof) / self.T) > random.uniform(0,1):
-                self.T = self.T * 0.95
-                self.accept_redirect(addr, currnxt, currntprv, self.flow_node.outflow[myid][2] - self.flow_node.next[currnxt].costto, theirid)
-                prvid, prvpr = self.flow_node.map[myid]
-                self.push_back(myid, prvid, prvpr)
-                self.flow_node.remove_outflow(myid)
-                with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                    log.write(f"redirectin traffic to {p.pub_key}\n")
-                msg = bytearray([FlowProtocol.NOTIFY_SWITCH])
-                msg += myid
-                msg += theirid
-                msg += p.id_node
-                msg += struct.pack(">f", cst_nxt_their)
-                loop = asyncio.get_event_loop()
-                loop.create_task(self._lower_sendto(msg, self.flow_node.next[currnxt].p.addr))
-                return
-
-            self.reject_redirect(p.addr, currntprv, currnxt, theirid)
-
-            return
-        elif data[0] == FlowProtocol.RESPOND_REDIRECT - 7:
-            currntprv = data[1:33]
-            currnxt = data[33:65]
-            myid = data[65:69]
-            if isinstance(self.requested_flows, RequestForRedirect):
-                if self.requested_flows.curr_pev == currntprv and self.requested_flows.smp.p.id_node == p.id_node and self.requested_flows.curr_next == currnxt and self.requested_flows.myid == myid:
-                    self.requested_flows = None
-                    self.attempts = 0
-                    self.flow_node.ignore_same(p.id_node)
-        elif data[0] == FlowProtocol.RESPOND_REDIRECT:
-            currntprv = data[1:33]
-            currnxt = data[33:65]
-            cost_new = struct.unpack(">f", data[65:69])[0]
-            myid = data[69:73]
-
-            if isinstance(self.requested_flows, RequestForRedirect):
-                if self.requested_flows.curr_pev == currntprv and self.requested_flows.smp.p.id_node == p.id_node and self.requested_flows.curr_next == currnxt and self.requested_flows.myid == myid:
-                    
-                    
-                    ret = self.flow_node.add_outflow(myid, currnxt, self.requested_flows.target, cost_new, self.flow_node.next[currnxt].costto)
-                    if not ret:
-                        self.requested_flows = None
-                        self.attemts = 0
-                        print("WRONG SOMETHING")
-                        with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                            log.write("wrong something\n")
-                        return
-                    self.T = self.T * 0.95
-                    msg = bytearray([FlowProtocol.CHANGE])
-                    target = self.requested_flows.target
-                    msg += self.flow_node.desired_flow.to_bytes(8, byteorder="big", signed=True)
-                    msg += target
-                    msg += struct.pack(">f", self.flow_node.min_cost_to_target(target))
-                    self.requested_flows = None
-                    self.attemts = 0
-                    with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                        log.write(f"redirecting traffic... I now have the traffic of {p.pub_key}\n")
-                    # print("correctly at that")
-                    loop = asyncio.get_event_loop()
-                    loop.create_task(self._lower_broadcast(msg))
-        elif data[0] == FlowProtocol.EVAL:
+        
+        
+        elif data[0] == FlowProtocolSS.EVAL:
             theirid = data[1:5]
             if self.flow_node.inflow.get(p.id_node) == None or self.flow_node.inflow[p.id_node].get(theirid) == None:
                 return
@@ -460,16 +279,16 @@ class FlowProtocol(AbstractProtocol):
                 return
             nxtpr = self.flow_node.outflow[myid][0]
 
-            msg = bytearray([FlowProtocol.EVAL])
+            msg = bytearray([FlowProtocolSS.EVAL])
             msg += myid
             msg += struct.pack(">f", self.flow_node.next.get(nxtpr).costto + cst)
             loop = asyncio.get_event_loop()
             loop.create_task(self._lower_sendto(msg, self.flow_node.next[nxtpr].p.addr))
 
-        elif data[0] == FlowProtocol.CANCEL_FLOW:
+        elif data[0] == FlowProtocolSS.CANCEL_FLOW:
             theirid = data[1:5]
             self.flow_node.remove_inflow(p.id_node, theirid)
-        elif data[0] == FlowProtocol.PUSH_BACK_FLOW:
+        elif data[0] == FlowProtocolSS.PUSH_BACK_FLOW:
            myid = data[1:5]
            with open(f"log{self.peer.pub_key}.txt", "a") as log:
             
@@ -477,7 +296,7 @@ class FlowProtocol(AbstractProtocol):
                 for k,v in self.flow_node.inflow.items():
                     cnt += len(v.items())
                 log.write("-----------\n")
-                log.write(f"{self.flow_node.desired_flow} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}\n")
+                log.write(f"{self.flow_node.desired_flow_source} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}\n")
 
                 log.write("our flow was pushed back...removing\n")
                 
@@ -488,31 +307,9 @@ class FlowProtocol(AbstractProtocol):
                 for k,v in self.flow_node.inflow.items():
                     cnt += len(v.items())
                 
-                log.write(f"{self.flow_node.desired_flow} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}\n")
+                log.write(f"{self.flow_node.desired_flow_sink} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}\n")
                 log.write("-----------\n")
-    def accept_redirect(self, addr, currnxt, currpv, cost_new, theirid):
-        msg = bytearray([FlowProtocol.RESPOND_REDIRECT])
-        msg += currpv
-        msg += currnxt
-
-        msg += struct.pack(">f", cost_new)
-        msg += theirid
-        loop = asyncio.get_event_loop()
-        loop.create_task(self._lower_sendto(msg, addr))
-    def reject_redirect(self, addr, currntprv, currnxt, theirid):
-        msg = bytearray([FlowProtocol.RESPOND_REDIRECT - 7])
-        msg += currntprv
-        msg += currnxt
-        msg += theirid
-        loop = asyncio.get_event_loop()
-        loop.create_task(self._lower_sendto(msg, addr))
-    def reject_change(self, addr, theirid, my_curr_nxt):
-        msg = bytearray([FlowProtocol.RESPOND_CHANGE - 1])
-        msg += theirid
-        msg += my_curr_nxt
-        loop = asyncio.get_event_loop()
-        loop.create_task(self._lower_sendto(msg, addr))
-        return
+    
         
     def perform_change(self, their_curr, theirid, my_curr_nxt, myid,new_next_cost_to_target  , who, their_cost_to_next):
         fp = self.flow_node.next[self.flow_node.outflow[myid][0]]
@@ -521,13 +318,13 @@ class FlowProtocol(AbstractProtocol):
         if self.flow_node.map.get(myid):
             prvid,prvpr = self.flow_node.map[myid]
             prvpr = self.flow_node.prev[prvpr]
-            msg = bytearray([FlowProtocol.NOTIFY_CHANGE_IN_COST])
+            msg = bytearray([FlowProtocolSS.NOTIFY_CHANGE_IN_COST])
             msg += prvid
             # print("notifying of change of cost to",new_next_cost_to_target + self.flow_node.next[their_curr].costto)
             msg += struct.pack(">f", new_next_cost_to_target + self.flow_node.next[their_curr].costto)
             loop.create_task(self._lower_sendto(msg, prvpr.p.addr))
         
-        msg = bytearray([FlowProtocol.NOTIFY_SWITCH])
+        msg = bytearray([FlowProtocolSS.NOTIFY_SWITCH])
         msg += myid
         msg += theirid
         msg += who
@@ -543,7 +340,7 @@ class FlowProtocol(AbstractProtocol):
         return
     def accept_change(self, addr, their_curr, theirid, my_curr_nxt, myid, nxt_cost,who,their_new):
         
-        msg = bytearray([FlowProtocol.RESPOND_CHANGE])
+        msg = bytearray([FlowProtocolSS.RESPOND_CHANGE])
         msg += theirid
         msg += my_curr_nxt
         msg += myid
@@ -557,7 +354,7 @@ class FlowProtocol(AbstractProtocol):
     async def _lower_broadcast(self, msg):
         return None    
     def reject_flow(self, addr, theirid, target):
-        msg = bytearray([FlowProtocol.FLOW_RESPONSE - 1])
+        msg = bytearray([FlowProtocolSS.FLOW_RESPONSE - 1])
         msg += self.stage.to_bytes(8, byteorder="big")
         msg += target
         if self.flow_node.targets.get(target) == None:
@@ -565,26 +362,26 @@ class FlowProtocol(AbstractProtocol):
         else:
             msg += struct.pack(">f", self.flow_node.targets[target])
         msg += theirid
-        msg += self.flow_node.desired_flow.to_bytes(8, byteorder="big",signed=True)
+        msg += self.flow_node.desired_flow_sink.to_bytes(8, byteorder="big",signed=True)
         print("sending rejection")
         loop = asyncio.get_event_loop()
         loop.create_task(self._lower_sendto(msg, addr))
     
     def accept_flow(self, addr, theirid, target, cost):
-        msg = bytearray([FlowProtocol.FLOW_RESPONSE])
+        msg = bytearray([FlowProtocolSS.FLOW_RESPONSE])
         msg += self.stage.to_bytes(8, byteorder="big")
-        msg += target
+        msg += self.peer.id_node
         msg += struct.pack(">f", cost)
         msg += theirid
-        msg += self.flow_node.desired_flow.to_bytes(8, byteorder="big",signed=True)
+        msg += self.flow_node.desired_flow_sink.to_bytes(8, byteorder="big",signed=True)
         loop = asyncio.get_event_loop()
         loop.create_task(self._lower_sendto(msg, addr))
     def request_flow(self, chc: FlowPeer, cst: float):
         self.attempts = 5
         uniqid = self.flow_node.gen_new_uniqid()
-        self.requested_flows = RequestForFlow(uniqueid = uniqid, to = chc, cost =  chc.mincostto, target = chc.mincostis, stg = self.stage + 1)
-        msg = bytearray([FlowProtocol.FLOW_REQUEST])
-        msg += (self.stage + 1).to_bytes(8, byteorder="big")
+        self.requested_flows = RequestForFlow(uniqueid = uniqid, to = chc, cost =  chc.mincostto, target = chc.mincostis, stg = (self.stage + 1) % self.max_stage)
+        msg = bytearray([FlowProtocolSS.FLOW_REQUEST])
+        msg += ((self.stage + 1) % self.max_stage).to_bytes(8, byteorder="big")
         msg += chc.mincostis
         msg += struct.pack(">f", chc.mincostto)
         msg += uniqid
@@ -595,10 +392,10 @@ class FlowProtocol(AbstractProtocol):
     def cancel_flow(self, myid, nxtpr: Peer, remove = False):
         if remove:
             self.flow_node.remove_outflow(myid)
-        msg = bytearray([FlowProtocol.CANCEL_FLOW])
+        msg = bytearray([FlowProtocolSS.CANCEL_FLOW])
         msg += myid
         loop = asyncio.get_event_loop()
-        loop.create_task(self._lower_sendto(msg, self.flow_node.next[nxtpr].p.addr))
+        loop.create_task(self._lower_sendto(msg, nxtpr.addr))
 
     def periodic(self):
         
@@ -610,7 +407,7 @@ class FlowProtocol(AbstractProtocol):
         print("requesting switch")
         self.attempts = 5
         self.requested_flows = offer
-        msg = bytearray([FlowProtocol.PROPOSE_CHANGE])
+        msg = bytearray([FlowProtocolSS.PROPOSE_CHANGE])
         msg += offer.my_flow
         msg += offer.new_next
         msg += offer.curr_next
@@ -622,7 +419,7 @@ class FlowProtocol(AbstractProtocol):
         loop.create_task(self._lower_sendto(msg, offer.smp.p.addr))
     def push_back(self, myid, theirid, prvpr):
         self.flow_node.push_back(theirid, prvpr)
-        msg = bytearray([FlowProtocol.PUSH_BACK_FLOW])
+        msg = bytearray([FlowProtocolSS.PUSH_BACK_FLOW])
         msg += theirid
         loop = asyncio.get_event_loop()
         if (self._lower_get_peer(prvpr)) != None:
@@ -631,7 +428,7 @@ class FlowProtocol(AbstractProtocol):
     def request_redirect(self, request: RequestForRedirect):
         self.attempts = 5
         self.requested_flows = request
-        msg = bytearray([FlowProtocol.PROPOSE_REDIRECT])
+        msg = bytearray([FlowProtocolSS.PROPOSE_REDIRECT])
         msg += request.curr_pev
         msg += request.curr_next
         msg += request.target
@@ -655,7 +452,7 @@ class FlowProtocol(AbstractProtocol):
             cnt = 0
             for k,v in self.flow_node.inflow.items():
                 cnt += len(v.items())
-            log.write(f"{self.flow_node.desired_flow} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}\n")
+            log.write(f"{self.flow_node.desired_flow_source} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}\n")
 
         if True:
             cost = 0
@@ -671,40 +468,39 @@ class FlowProtocol(AbstractProtocol):
                 loop = asyncio.get_event_loop()
                 target = self.flow_node.get_random_target()
                 if target != None:
-                    msg = bytearray([FlowProtocol.CHANGE])
-                    msg += self.flow_node.desired_flow.to_bytes(8, byteorder="big", signed=True)
+                    msg = bytearray([FlowProtocolSS.CHANGE])
+                    msg += self.flow_node.desired_flow_sink.to_bytes(8, byteorder="big", signed=True)
                     msg += target[0]
                     msg += struct.pack(">f", target[1])
                     
                     
                     loop.create_task(self._lower_broadcast(msg))
-                msg = self.flow_node.construct_update_message(FlowProtocol.QUERY_FLOWS)
-                loop.create_task(self._lower_broadcast(msg))
+                
             elif len(self.iterationsss) % 12 == 3:
                 loop = asyncio.get_event_loop()
                 for k, d in self.flow_node.inflow.items():
                     for idflow, v in d.items():
                         if self.flow_node.outflow.get(v[0])!=None:
-                            msg = bytearray([FlowProtocol.NOTIFY_CHANGE_IN_COST])
+                            msg = bytearray([FlowProtocolSS.NOTIFY_CHANGE_IN_COST])
                             msg += idflow
                             # print("notifying of change of cost to",v[2])
                             msg += struct.pack(">f", self.flow_node.outflow[v[0]][2])
                             loop.create_task(self._lower_sendto(msg, self._lower_get_peer(k).addr))
             elif len(self.iterationsss) % 12 == 5 or len(self.iterationsss) % 12 == 1:
                 loop = asyncio.get_event_loop()
-                msg = bytearray([FlowProtocol.INTRODUCTION])
-                msg += self.flow_node.desired_flow.to_bytes(8, byteorder="big", signed=True)
+                msg = bytearray([FlowProtocolSS.INTRODUCTION])
+                msg += self.flow_node.desired_flow_sink.to_bytes(8, byteorder="big", signed=True)
                 msg += self.stage.to_bytes(8, byteorder="big")
                 loop.create_task(self._lower_broadcast(msg))
             elif len(self.iterationsss) % 12 == 7 or len(self.iterationsss) % 12 == 9:
                 loop = asyncio.get_event_loop()
                 for k, v in self.flow_node.outflow.items():
-                    msg = bytearray([FlowProtocol.CHECK_FLOW])
+                    msg = bytearray([FlowProtocolSS.CHECK_FLOW])
                     msg += k
                     loop.create_task(self._lower_sendto(msg, self.flow_node.next[v[0]].p.addr))
                 for k,dv in self.flow_node.inflow.items():
                     for theirid,_ in dv.items():
-                        msg = bytearray([FlowProtocol.CHECK_FLOW])
+                        msg = bytearray([FlowProtocolSS.CHECK_FLOW])
                         msg += theirid
                         loop.create_task(self._lower_sendto(msg, self.flow_node.prev[k].p.addr))
 
@@ -712,7 +508,7 @@ class FlowProtocol(AbstractProtocol):
                 loop = asyncio.get_event_loop()
                 if self.stage == 0:
                     for k, v in self.flow_node.outflow.items():
-                        msg = bytearray([FlowProtocol.EVAL])
+                        msg = bytearray([FlowProtocolSS.EVAL])
                         msg += k
                         msg += struct.pack(">f", self.flow_node.next.get(v[0]).costto)
                         loop.create_task(self._lower_sendto(msg, self.flow_node.next[v[0]].p.addr))
@@ -728,45 +524,17 @@ class FlowProtocol(AbstractProtocol):
 
 
             print(f"sending {flow} at cost {cost}, {self.flow_node.flow} {self.flow_node.capacity}" )
-        if len(self.flow_node.outstanding_inflow.items()) > 0 and self.stage != 0 and self.max_stage != self.stage:
-            self.idles_with_flow -= 1
-        if self.idles_with_flow <= 0:
-            self.idles_with_flow = 4
-            to_remove = []
-            with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                log.write("triggered\n")
-            for k, v in self.flow_node.outstanding_inflow.items():
-                to_remove.append((k,v[0],v[1]))
-            for t in to_remove:
-                self.push_back(t[0], t[2], t[1])
-            loop = asyncio.get_running_loop()
-            self.refresh_loop = loop.call_later(2, self.periodic)
-
-            return   
-        if len(self.flow_node.outstanding_outflow.items()) > 0 and self.stage != 0 and self.max_stage != self.stage:
-            self.idles_with_outflow -= 1
-        if self.idles_with_outflow <= 0:
-            self.idles_with_outflow = 12
-            to_remove = []
-            with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                log.write("triggered\n")
-            for k, v in self.flow_node.outstanding_outflow.items():
-                to_remove.append(k)
-            for t in to_remove:
-                self.cancel_flow(k, self.flow_node.outflow[k][0],True)
-            loop = asyncio.get_running_loop()
-            self.refresh_loop = loop.call_later(2, self.periodic)
-
-            return  
-        if self.flow_node.desired_flow >= 0:
+            print(f"desiredflow {self.flow_node.desired_flow_sink}" )
+         
+        if self.flow_node.desired_flow_source >= 0:
             if self.requested_flows != None:
                 self.attempts -= 1
                 print("outstanding request")
                 if self.attempts > 0:
                     t = self.attempts
                     if isinstance(self.requested_flows, RequestForFlow):
-                        msg = bytearray([FlowProtocol.FLOW_REQUEST])
-                        msg += (self.stage + 1).to_bytes(8, byteorder="big")
+                        msg = bytearray([FlowProtocolSS.FLOW_REQUEST])
+                        msg += ((self.stage + 1) % self.max_stage).to_bytes(8, byteorder="big")
                         msg += self.requested_flows.to.mincostis
                         msg += struct.pack(">f", self.requested_flows.to.mincostto)
                         msg += self.requested_flows.uniqueid
@@ -777,9 +545,7 @@ class FlowProtocol(AbstractProtocol):
             else:
                 self.attempts = 0
             if self.attempts <= 0:
-                
-
-                    
+   
                 self.requested_flows = None
                 self.attempts = 0
                 chc, cst = self.flow_node.get_next_node()
@@ -787,21 +553,8 @@ class FlowProtocol(AbstractProtocol):
                     print("creating request")
                     self.request_flow(chc,cst)
                 else:
-                    print("dont know anyoen that can take")
-                    if random.uniform(0,1) < 0.3:
-                        chng_rqst = self.flow_node.get_same(self.T)
-                        if isinstance(chng_rqst, RequestForChange):
-                            self.request_switch(chng_rqst)
-                        elif isinstance(chng_rqst, RequestForRedirect):
-                            self.request_redirect(chng_rqst)
-        else:
-            if random.uniform(0,1) < 0.1:
-                chng_rqst = self.flow_node.get_same(self.T)
-                if isinstance(chng_rqst, RequestForChange):
-                    self.request_switch(chng_rqst)
-                elif isinstance(chng_rqst, RequestForRedirect):
-                    self.request_redirect(chng_rqst)
-            print("mine desired flow", self.flow_node.desired_flow)
+                    print("dont know anyone that can take")
+        
         loop = asyncio.get_running_loop()
         self.refresh_loop = loop.call_later(2, self.periodic)
     
@@ -819,8 +572,8 @@ class FlowProtocol(AbstractProtocol):
     @bindfrom("connected_callback")
     def peer_connected(self, addr, p: Peer):
         print("Introducing to", p.addr)
-        msg = bytearray([FlowProtocol.INTRODUCTION])
-        msg += self.flow_node.desired_flow.to_bytes(8, byteorder="big", signed=True)
+        msg = bytearray([FlowProtocolSS.INTRODUCTION])
+        msg += self.flow_node.desired_flow_sink.to_bytes(8, byteorder="big", signed=True)
         msg += self.stage.to_bytes(8, byteorder="big")
         loop = asyncio.get_running_loop()
         loop.create_task(self._lower_sendto(msg, p.addr))
