@@ -56,6 +56,7 @@ class TrainingProtocol(AbstractProtocol):
         self.aggregation = []
         self.prev_grad = None
         self.iter = 0
+        self.time_start = datetime.now()
         print(self.pipeline_rank, self.rank,self.dp_group)
     
     @bindto("open_connection")
@@ -75,8 +76,10 @@ class TrainingProtocol(AbstractProtocol):
     async def start(self, p: Peer):
         await super().start(p)
         if self.pipeline_rank == 0: 
-            self.start_iteration()
-    def start_iteration(self):
+            loop = asyncio.get_event_loop()
+                    
+            loop.create_task(self.start_iteration())
+    async def start_iteration(self):
 
         assert self.pipeline_rank == 0
         ttl = (datetime.now() - self.time_start).total_seconds()
@@ -101,10 +104,10 @@ class TrainingProtocol(AbstractProtocol):
             self.buffer_in[new_seq_id] = target
             ret = TrainingProtocol.train(self.net,self.optimizer, data, rank = 0, stage=1)
             ret.retain_grad()
-            print("sending to next")
+            #print("sending to next")
             self.buffer_out[new_seq_id] = ret
-            loop = asyncio.get_running_loop()
-            loop.create_task(self.send_stream(self.next,pickle.dumps(ret),seqdata=new_seq_id))
+            
+            await self.send_stream(self.next,pickle.dumps(ret),seqdata=new_seq_id)
 
 
     
@@ -150,7 +153,7 @@ class TrainingProtocol(AbstractProtocol):
             if self.pipeline_rank == 0:
                 TrainingProtocol.train(self.net,self.optimizer, inp_batch=self.buffer_out.get(seq_id),output=data, rank = 0, stage = -1)
                 tmp = []
-                
+                print("got back a batch")
                 for param in self.net.parameters():
                     if param.grad == None:
                         tmp.append(zeros_like(param.view(-1)))
@@ -167,10 +170,13 @@ class TrainingProtocol(AbstractProtocol):
                 # print("calculating\n\n\n\n",len(self.dp_group))
                 del self.buffer_in[seq_id]
                 del self.buffer_out[seq_id]
+                print(len(self.aggregation))
                 if len(self.aggregation) == self.microbatches * len(self.dp_group):
                     self._apply_grad()
                     # print("\n\n\n\ncalculated")
-                    self.start_iteration()
+                    loop = asyncio.get_event_loop()
+                    
+                    loop.create_task(self.start_iteration())
             else:
                 ret = TrainingProtocol.train(self.net, self.optimizer, inp_batch=self.buffer_out.get(seq_id), output=data, rank = self.pipeline_rank, stage = -1)
                 # print(ret)
@@ -190,6 +196,7 @@ class TrainingProtocol(AbstractProtocol):
                     
                 self.aggregation.append(self.prev_grad)
                 # print("calculating\n\n\n\n",len(self.dp_group))
+                print(len(self.aggregation))
                 if len(self.aggregation) == self.microbatches * len(self.dp_group):
                     self._apply_grad()
                 del self.buffer_in[seq_id]
@@ -197,20 +204,29 @@ class TrainingProtocol(AbstractProtocol):
         elif nodeid in self.dp_group:
             self.aggregation.append(data)
             # pprint("collecting...")
+            print(len(self.aggregation))
             if len(self.aggregation) == self.microbatches * len(self.dp_group):
                 self._apply_grad()
                 if self.pipeline_rank == 0:
-                    self.start_iteration()
+                    loop = asyncio.get_event_loop()
+                    
+                    loop.create_task(self.start_iteration())
         return
 
     async def send_stream(self, node_id, data, seqdata=b''):
         # print("SENDING TO")
         p: Peer = await self._lower_find_peer(node_id)
         # print("FOUND PEER SENDING")
-        await self._lower_open_connection(p.addr[0], p.tcp, p.id_node)
+        
         to_send = bytearray(seqdata)
         to_send += data
+        ret = False
+        while not ret:
+            ret = await self._lower_open_connection(p.addr[0], p.tcp, p.id_node)
+            await asyncio.sleep(1)
+        
         await self._lower_send_stream(node_id, to_send)
+        
         return
     def get_lowest_stream(self):
         submodule = self.submodule

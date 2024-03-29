@@ -161,7 +161,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 self.send_find_response(addr,closest_peers,unique_id)
         
         elif data[0] == KademliaDiscovery.RESPOND_FIND:
-            print(self.peer.pub_key,"got a response",addr)
+            #print(self.peer.pub_key,"got a response",addr)
             i = 1
             unique_id = data[i:i+8]
             i+=8

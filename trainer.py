@@ -89,7 +89,7 @@ class Pipe2(nn.Module):
 protocol = DefaultProtocol()
 gossip = KademliaDiscovery([],interval=5)
 gossip.set_lower(protocol)
-stream = StreamProtocol(False)
+stream = StreamProtocol(True)
 stream.set_lower(gossip)
 net = None
 loss_fn = None
@@ -130,9 +130,10 @@ tmp = (rank + pipeline_size) % world_size
 while tmp != rank:
     dp_group.append(SHA256(str(tmp)))
     tmp = (tmp + pipeline_size) % world_size
-training = TrainingProtocol(world_size,pipeline_size,int(argv[1]),net,optimizer,next_node,prev_node,dp_group=dp_group, max_iterations = 20, loss_fn= loss_fn, get_data=get_data)
+training = TrainingProtocol(world_size,pipeline_size,int(argv[1]),net,optimizer,next_node,prev_node,dp_group=dp_group, max_iterations = 20, loss_fn= loss_fn, get_data=get_data,
+microbatches=3)
 training.set_lower(stream)
-peer = Peer(None, None, pub_key=argv[1])
+peer = Peer(None, pub_key=argv[1])
 me = TrainingNode(peer, training,"127.0.0.1", 10015 if argv[1] == "0" else None)
 print( "TCP", me.tcp_port)
 print(peer.id_node)

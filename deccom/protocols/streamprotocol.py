@@ -1,5 +1,7 @@
 import asyncio
+from datetime import datetime
 import random
+from deccom.cryptofuncs.hash import SHA256
 from deccom.utils.common import ternary_comparison
 from asyncio import exceptions
 from typing import Any, Callable, List, Union
@@ -47,7 +49,10 @@ class StreamProtocol(AbstractProtocol):
         self.disconnected_callback = disconnected_callback
         self.stream_close_callback = stream_close_callback
         self.connections: dict[bytes, DictItem]= dict()
+        self.locks: dict[bytes, asyncio.Lock] = dict()
         self.always_connect = always_connect
+        self.await_connections = dict()
+        # self.lock = asyncio.Lock()
         
     
     async def handle_connection(self, reader: asyncio.StreamReader,writer: asyncio.StreamWriter, node_id: Any = None, addr: Any = None):
@@ -60,14 +65,16 @@ class StreamProtocol(AbstractProtocol):
             writer.close()
             return
         if len(data)<5 or data[0:4] != b'\xe4\xe5\xf3\xc6':
-            
+            print("wrong introduction")
             writer.close()
             return
         node_id = data[4:-1]
+        if self.locks.get(node_id) == None:
+            self.locks[node_id] = asyncio.Lock()
         # print("connection from",node_id)
         if self.connections.get(node_id) != None:
             print("duplicate connection RECEIVED")
-            print(self.connections.get(node_id).opened_by_me,ternary_comparison(self.peer.id_node, node_id))
+            #rint(self.connections.get(node_id).opened_by_me,ternary_comparison(self.peer.id_node, node_id))
             if self.connections.get(node_id).opened_by_me * ternary_comparison(self.peer.id_node, node_id) == -1:
                 print("closing previous, keeping new")
                 self.remove_from_dict(node_id)
@@ -103,28 +110,36 @@ class StreamProtocol(AbstractProtocol):
         if remote_port == None:
             print("empty remote port")
             return False
+        if self.connections.get(node_id) == None and self.await_connections.get(node_id) != None and not self.await_connections[node_id].done():
+            await self.await_connections[node_id]
+        
         if self.connections.get(node_id) != None:
-            print("duplicate connection OPENED")
-            
-            if self.connections.get(node_id).opened_by_me * ternary_comparison(self.peer.id_node, node_id) == -1:
-                # print("closing previous, keeping new")
-                self.remove_from_dict(node_id)
-            else:
-                print("keeping old one")
-                return True
+            #print("duplicate connection OPENED")
+            return True
+        
+        
+        self.await_connections[node_id] = asyncio.Future()
         try:
             reader, writer = await asyncio.open_connection(
                         remote_ip, remote_port)
+            if self.locks.get(node_id) == None:
+                self.locks[node_id] = asyncio.Lock()
         except ConnectionRefusedError:
+            with open(f"log{self.peer.pub_key}.txt", "a") as log:
+                log.write("connection refused\n")
             print("BROKEN SOMETHING")
             return False
         self.connections[node_id] = DictItem(reader,writer,None,1)
         self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,(remote_ip,remote_port)))
         # print("introducing myself :)")
-        writer.write(b'\xe4\xe5\xf3\xc6')
-        writer.write(self.peer.id_node)
-        writer.write(b'\n')
-        await writer.drain()
+        async with self.locks[node_id]:
+            writer.write(b'\xe4\xe5\xf3\xc6')
+            writer.write(self.peer.id_node)
+            writer.write(b'\n')
+            
+            await writer.drain()
+        self.await_connections[node_id].set_result(True)
+        #del self.await_connections[node_id]
         return True
     def set_connected_callback(self, callback):
         self.connected_callback = callback
@@ -132,41 +147,79 @@ class StreamProtocol(AbstractProtocol):
         
         # seqrand = random.randint(1,40000)
         # print("listening ", seqrand)
-        data = await reader.read(32)
-        
+        try:
+            data = await reader.read(32)
+        except (ConnectionResetError, BrokenPipeError) as e:
+            with open(f"log{self.peer.pub_key}.txt", "a") as log:
+                log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
+                log.write(f" closed because reset from {node_id}\n")
+                log.write(e)
+                log.write("\n")
+            async with self.locks[node_id]:
+                if node_id !=None and self.connections.get(node_id) != None:
+                    self.connections[node_id].fut = None
+                print("closing because reset", addr,node_id)
+                self.remove_from_dict(node_id)
+                self.closed_stream(node_id, addr)
+                return
+
         
         if data == b'':
-            if node_id !=None and self.connections.get(node_id) != None:
-                self.connections[node_id].fut = None
-            print("closing because received empty bytes", addr,node_id)
-            self.remove_from_dict(node_id)
-            self.closed_stream(node_id, addr)
-            return
+            async with self.locks[node_id]:
+                if node_id !=None and self.connections.get(node_id) != None:
+                    self.connections[node_id].fut = None
+                print("closing because received empty bytes", addr,node_id)
+                self.remove_from_dict(node_id)
+                self.closed_stream(node_id, addr)
+                return
         buffer = bytearray()
         i = int.from_bytes(data,byteorder="big")
+        with open(f"log{self.peer.pub_key}.txt", "a") as log:
+            log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
+            log.write(f" will from {self.get_peer(node_id).pub_key} {i} {len(data)}\n")
+        
         while i > 0:
-            data = await reader.read(9048)
+            data = await reader.read(min(i, 9048))
+            if data == b'':
+                async with self.locks[node_id]:
+                    if node_id !=None and self.connections.get(node_id) != None:
+                        self.connections[node_id].fut = None
+                    print("closing because received empty bytes", addr,node_id)
+                    self.remove_from_dict(node_id)
+                    self.closed_stream(node_id, addr)
+                    return
             i -= len(data)
             buffer+=data
+        with open(f"log{self.peer.pub_key}.txt", "a") as log:
+            log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
+            log.write(f" receive from {self.get_peer(node_id).pub_key} {len(buffer)}\n")
         # print(seqrand,"read",len(buffer), "from",self.get_peer(node_id).pub_key)
-        asyncio.ensure_future(self.process_data(buffer,node_id,addr))
+        loop = asyncio.get_event_loop()
+        asyncio.run_coroutine_threadsafe(self.process_data(buffer,node_id,addr), loop)
+        
         self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,addr))
     async def send_stream(self, node_id, data):
+        
         if self.connections.get(node_id) == None: 
             print("CANT FIND???")
             return
-        print("writing",len(data))
-        self.connections[node_id].writer.write(len(data).to_bytes(32,byteorder="big"))
-        await self.connections[node_id].writer.drain()
-        self.connections[node_id].writer.write(data)
-        await self.connections[node_id].writer.drain()
+        async with self.locks[node_id]:
+            with open(f"log{self.peer.pub_key}.txt", "a") as log:
+                log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
+                log.write(f" sending to {self.get_peer(node_id).pub_key} {len(data)}\n")
+
+            self.connections[node_id].writer.write(len(data).to_bytes(32,byteorder="big"))
+            await self.connections[node_id].writer.drain()
+            self.connections[node_id].writer.write(data)
+            await self.connections[node_id].writer.drain()
         # print("done srream")
     def set_stream_close_callback(self, callback):
         self.stream_close_callback = callback    
     
     @bindfrom("stream_callback")
     async def process_data(self,data,node_id,addr):
-        # print("RECEIVED FROM",node_id)
+        # if node_id == SHA256("3") or (self.peer.pub_key == "3" and node_id == SHA256("0")):
+        #     print("RECEIVED FROM",node_id)
         self.stream_callback(data,node_id,addr)
     def remove_from_dict(self,nodeid):
         if self.connections.get(nodeid) == None:
