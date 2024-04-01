@@ -1,1 +1,0 @@
-optimal flow is 3 at cost of 12

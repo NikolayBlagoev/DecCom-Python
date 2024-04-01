@@ -160,11 +160,12 @@ def find_flow(g: Graph):
             e.rev.flow -= vl
             e.rev.resid = e.rev.cap - e.rev.flow
 
-def eval(g: Graph):
+def eval(g: Graph, verbose = True):
     flw = 0
     for edg in g.t.outgoing_edges:
         flw-=edg.flow
-    print(f"WE CAN ACHIEVE A FLOW OF ${flw}")
+    if verbose:
+        print(f"WE CAN ACHIEVE A FLOW OF ${flw}")
     cost: float = 0
     max_cost: float = 0
     for i, n in g.node_d.items():
@@ -175,7 +176,8 @@ def eval(g: Graph):
                     # print(f"NODE ${abs(edg.frm.id) - 2} communicates with ${abs(edg.to.id) - 2} with flow of ${edg.flow}")
                 cost+=edg.cost*edg.flow
                 max_cost = max(edg.cost*edg.flow, max_cost)
-    print(f"WITH TOTAL PIPELINE COST ${cost} ")
+    if verbose:
+        print(f"WITH TOTAL PIPELINE COST ${cost} ")
     #print(f"WITH MAXIMUM PIPELINE COST ${max_cost} ")
     max_cost: float = 0
     prevl = [g.s]
@@ -200,12 +202,12 @@ def eval(g: Graph):
 import json    
 if __name__ == "__main__":  
     config = {}
-    N = 38
+    N = 33
     config['N'] = N
-    S = 6
+    S = 8
     config['S'] = S
     cost_map = []
-    dataholder_count = 2
+    dataholder_count = 1
     for _ in range(N+dataholder_count):
         cost_map.append([70_000 for _ in range(N+dataholder_count)])
     dataholders: list[int] = []
@@ -214,7 +216,7 @@ if __name__ == "__main__":
     for i in range(dataholder_count):
         dataholders.append(i)
         ttl = i+1
-        workload.append(10)
+        workload.append(20)
 
     per_stage = (N - dataholder_count)//S
     
@@ -230,11 +232,11 @@ if __name__ == "__main__":
             workload.append(random.randint(2,5))
             for p in prv:
                 # print("update")
-                cost_map[p][ttl] = random.randint(1,700)
+                cost_map[p][ttl] = random.randint(1,10)
                 cost_map[ttl][p] = cost_map[p][ttl]
 
                 for bv in range(dataholder_count):
-                    cost_map[bv][ttl] = random.randint(1,700)
+                    cost_map[bv][ttl] = random.randint(1,10)
                     cost_map[ttl][bv] = cost_map[bv][ttl]
                     cost_map[N+bv][ttl] = cost_map[bv][ttl]
                     cost_map[ttl][N+bv] = cost_map[bv][ttl]
@@ -247,7 +249,7 @@ if __name__ == "__main__":
     sinks = []
     for i in range(dataholder_count):
         sinks.append(ttl)
-        workload.append(10)
+        workload.append(20)
         ttl+=1
     
     assignment.append(sinks)

@@ -40,8 +40,8 @@ class FlowProtocol(AbstractProtocol):
         self.max_stage = max_stage
         self.requested_flows: RequestForChange | RequestForRedirect | RequestForFlow = None
         self.costmap = costmap
-        self.T = 2
-        self.idles_with_flow = 10
+        self.T = 1.7
+        self.idles_with_flow = 7
         self.idles_with_outflow = 10
         self.checked = dict()
 
@@ -137,7 +137,7 @@ class FlowProtocol(AbstractProtocol):
             theirid = data[1:5]
             if self.flow_node.prev.get(p.id_node) != None:
                 if self.flow_node.inflow.get(p.id_node) == None or self.flow_node.inflow[p.id_node].get(theirid) == None:
-                    msg = bytearray([FlowProtocol.PUSH_BACK_FLOW])
+                    msg = bytearray([FlowProtocol.PUSH_BACK_FLOW + 1])
                     msg += theirid
                     loop = asyncio.get_event_loop()
                     loop.create_task(self._lower_sendto(msg, addr))
@@ -179,7 +179,7 @@ class FlowProtocol(AbstractProtocol):
                 self.cancel_flow(mid,p)
                 print("wrong receiver", self.requested_flows.uniqueid, mid)
                 return 
-            self.idles_with_flow = 7
+            self.idles_with_flow = 8
             with open(f"log{self.peer.pub_key}.txt", "a") as log:
                 log.write("-----------\n")
                 cnt = 0
@@ -441,13 +441,24 @@ class FlowProtocol(AbstractProtocol):
                     msg += self.flow_node.desired_flow.to_bytes(8, byteorder="big", signed=True)
                     msg += target
                     msg += struct.pack(">f", self.flow_node.min_cost_to_target(target))
+                    prvid = self.requested_flows.curr_pev
+                    
                     self.requested_flows = None
                     self.attemts = 0
+
                     with open(f"log{self.peer.pub_key}.txt", "a") as log:
                         log.write(f"redirecting traffic... I now have the traffic of {p.pub_key}\n")
                     # print("correctly at that")
                     loop = asyncio.get_event_loop()
-                    loop.create_task(self._lower_broadcast(msg))
+                    loop.create_task(self._lower_sendto(msg, self.flow_node.prev[prvid].p.addr))
+                    #loop.create_task(self._lower_broadcast(msg))
+
+
+
+
+                    
+
+
         elif data[0] == FlowProtocol.EVAL:
             theirid = data[1:5]
             if self.flow_node.inflow.get(p.id_node) == None or self.flow_node.inflow[p.id_node].get(theirid) == None:
@@ -482,6 +493,27 @@ class FlowProtocol(AbstractProtocol):
                 log.write("our flow was pushed back...removing\n")
                 
            self.flow_node.remove_outflow(myid) 
+           with open(f"log{self.peer.pub_key}.txt", "a") as log:
+            
+                cnt = 0
+                for k,v in self.flow_node.inflow.items():
+                    cnt += len(v.items())
+                
+                log.write(f"{self.flow_node.desired_flow} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}\n")
+                log.write("-----------\n")
+        elif data[0] == FlowProtocol.PUSH_BACK_FLOW + 1:
+           myid = data[1:5]
+           with open(f"log{self.peer.pub_key}.txt", "a") as log:
+            
+                cnt = 0
+                for k,v in self.flow_node.inflow.items():
+                    cnt += len(v.items())
+                log.write("-----------\n")
+                log.write(f"{self.flow_node.desired_flow} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}\n")
+
+                log.write("our flow was pushed back...removing\n")
+           self.idles_with_flow = 2
+           self.flow_node.remove_outflow(myid, set_val=5) 
            with open(f"log{self.peer.pub_key}.txt", "a") as log:
             
                 cnt = 0
@@ -598,7 +630,7 @@ class FlowProtocol(AbstractProtocol):
         msg = bytearray([FlowProtocol.CANCEL_FLOW])
         msg += myid
         loop = asyncio.get_event_loop()
-        loop.create_task(self._lower_sendto(msg, self.flow_node.next[nxtpr].p.addr))
+        loop.create_task(self._lower_sendto(msg, nxtpr.addr))
 
     def periodic(self):
         
@@ -620,9 +652,9 @@ class FlowProtocol(AbstractProtocol):
         msg += struct.pack(">f", offer.nxt_cost)
         loop = asyncio.get_event_loop()
         loop.create_task(self._lower_sendto(msg, offer.smp.p.addr))
-    def push_back(self, myid, theirid, prvpr):
+    def push_back(self, myid, theirid, prvpr, addition = 0):
         self.flow_node.push_back(theirid, prvpr)
-        msg = bytearray([FlowProtocol.PUSH_BACK_FLOW])
+        msg = bytearray([FlowProtocol.PUSH_BACK_FLOW + addition])
         msg += theirid
         loop = asyncio.get_event_loop()
         if (self._lower_get_peer(prvpr)) != None:
@@ -655,7 +687,7 @@ class FlowProtocol(AbstractProtocol):
             cnt = 0
             for k,v in self.flow_node.inflow.items():
                 cnt += len(v.items())
-            log.write(f"{self.flow_node.desired_flow} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}\n")
+            log.write(f"{self.flow_node.desired_flow} {len(self.flow_node.outflow.items())},{cnt}, {len(self.flow_node.outstanding_outflow.items())},{len(self.flow_node.outstanding_inflow.items())}  {self.idles_with_flow}\n")
 
         if True:
             cost = 0
@@ -708,7 +740,7 @@ class FlowProtocol(AbstractProtocol):
                         msg += theirid
                         loop.create_task(self._lower_sendto(msg, self.flow_node.prev[k].p.addr))
 
-            if len(self.iterationsss) > 127: # takes ~7 iterations to start processes
+            if len(self.iterationsss) > 134: # takes ~14 iterations to start processes
                 loop = asyncio.get_event_loop()
                 if self.stage == 0:
                     for k, v in self.flow_node.outflow.items():
@@ -728,21 +760,24 @@ class FlowProtocol(AbstractProtocol):
 
 
             print(f"sending {flow} at cost {cost}, {self.flow_node.flow} {self.flow_node.capacity}" )
-        if len(self.flow_node.outstanding_inflow.items()) > 0 and self.stage != 0 and self.max_stage != self.stage:
-            self.idles_with_flow -= 1
-        if self.idles_with_flow <= 0:
-            self.idles_with_flow = 4
+        
+        if True:
+            #self.idles_with_flow = 4
+            buff = dict()
             to_remove = []
-            with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                log.write("triggered\n")
+            
             for k, v in self.flow_node.outstanding_inflow.items():
-                to_remove.append((k,v[0],v[1]))
+                buff[k] = (v[0],v[1],v[2] - 1)
+                if v[2] <= 1:
+                    to_remove.append((k,v[0],v[1]))
+            self.flow_node.outstanding_inflow = buff
+            if len(to_remove) > 0:
+                with open(f"log{self.peer.pub_key}.txt", "a") as log:
+                    log.write(f"triggered {len(to_remove)}\n")
             for t in to_remove:
-                self.push_back(t[0], t[2], t[1])
-            loop = asyncio.get_running_loop()
-            self.refresh_loop = loop.call_later(2, self.periodic)
-
-            return   
+                self.push_back(t[0], t[2], t[1],addition = 1)
+            
+        assert self.flow_node.capacity >= len(self.flow_node.outflow.items())
         if len(self.flow_node.outstanding_outflow.items()) > 0 and self.stage != 0 and self.max_stage != self.stage:
             self.idles_with_outflow -= 1
         if self.idles_with_outflow <= 0:
@@ -753,7 +788,7 @@ class FlowProtocol(AbstractProtocol):
             for k, v in self.flow_node.outstanding_outflow.items():
                 to_remove.append(k)
             for t in to_remove:
-                self.cancel_flow(k, self.flow_node.outflow[k][0],True)
+                self.cancel_flow(t, self.flow_node.next[self.flow_node.outflow[t][0]].p,True)
             loop = asyncio.get_running_loop()
             self.refresh_loop = loop.call_later(2, self.periodic)
 
@@ -814,7 +849,8 @@ class FlowProtocol(AbstractProtocol):
      
     @bindfrom("disconnected_callback")
     def remove_peer(self, addr: tuple[str, int], node_id: bytes):
-        return
+        self.flow_node.remove_peer(node_id)
+        
         
     @bindfrom("connected_callback")
     def peer_connected(self, addr, p: Peer):

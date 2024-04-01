@@ -9,7 +9,7 @@ from deccom.nodes import Node
 import json
 
 from flowprotocol_ss import FlowProtocolSS
-with open("config.json", "r") as js:
+with open("config2.json", "r") as js:
     data = json.load(js)
 
 pr = sys.argv[1]
@@ -23,7 +23,7 @@ def costmap(a1, a2):
 
 peer = Peer(None, pr)
 lowest = DefaultProtocol()
-prs = KademliaDiscovery(interval=10, k = 20)
+prs = BigGossip(interval=5, k = 30)
 if pr_int != 0:
     prs.bootstrap_peers.append(Peer(("127.0.0.1", 10020), "0"))
 prs.set_lower(lowest)

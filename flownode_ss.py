@@ -146,7 +146,29 @@ class FlowNode_SS(object):
             return None
         return random.sample(self.targets.items(), 1)[0]
     def remove_peer(self, pid):
-        return # NOT IMPLEMENTED
+        if self.next.get(pid) != None:
+            to_remove = []
+            for k,v in self.outflow.items():
+                if v[0] == pid:
+                    to_remove.append(k)
+            for t in to_remove:
+                self.remove_outflow(t)
+            del self.next[pid]
+            
+        elif self.inflow.get(pid) != None:
+            to_remove = []
+            dv = self.inflow[pid]
+            for k,v in dv.items():
+            
+                to_remove.append(k)
+            for t in to_remove:
+                self.remove_inflow(pid, t)
+            del self.prev[pid]
+            
+        elif self.same.get(pid) != None:
+            del self.same[pid]
+        
+        return
     def update_peer(self, pid, target, cost, dflow):
         if self.next.get(pid) != None:
             self.next[pid].dist_to_targ[target] = cost

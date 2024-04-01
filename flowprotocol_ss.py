@@ -288,7 +288,7 @@ class FlowProtocolSS(AbstractProtocol):
         elif data[0] == FlowProtocolSS.CANCEL_FLOW:
             theirid = data[1:5]
             self.flow_node.remove_inflow(p.id_node, theirid)
-        elif data[0] == FlowProtocolSS.PUSH_BACK_FLOW:
+        elif data[0] == FlowProtocolSS.PUSH_BACK_FLOW or data[0] == FlowProtocolSS.PUSH_BACK_FLOW + 1:
            myid = data[1:5]
            with open(f"log{self.peer.pub_key}.txt", "a") as log:
             
@@ -504,7 +504,7 @@ class FlowProtocolSS(AbstractProtocol):
                         msg += theirid
                         loop.create_task(self._lower_sendto(msg, self.flow_node.prev[k].p.addr))
 
-            if len(self.iterationsss) > 127: # takes ~7 iterations to start processes
+            if len(self.iterationsss) > 134: # takes ~14 iterations to start processes
                 loop = asyncio.get_event_loop()
                 if self.stage == 0:
                     for k, v in self.flow_node.outflow.items():
@@ -567,7 +567,7 @@ class FlowProtocolSS(AbstractProtocol):
      
     @bindfrom("disconnected_callback")
     def remove_peer(self, addr: tuple[str, int], node_id: bytes):
-        return
+        self.flow_node.remove_peer(node_id)
         
     @bindfrom("connected_callback")
     def peer_connected(self, addr, p: Peer):

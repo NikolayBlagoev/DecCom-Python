@@ -68,7 +68,7 @@ class FlowNode(object):
         self.capacity = capacity
         self.flow = flow
         self.outstanding_outflow: dict[bytes, tuple[bytes, float]] = dict() # unique id - > target, cost
-        self.outstanding_inflow: dict[bytes, tuple[bytes, bytes]] = dict() # unique id -> previous peer, their id
+        self.outstanding_inflow: dict[bytes, tuple[bytes, bytes,int]] = dict() # unique id -> previous peer, their id, count
         self.inflow: dict[bytes, dict[bytes,tuple[bytes, bytes, float]]] = dict() # previous peer -> their unique id -> my unique id, target, intermediate cost
         self.outflow: dict[bytes, tuple[bytes, bytes, float]] = dict() # unique id -> next peer, target, cost
         self.uniqueids: list[bytes] = [] # my unique ids
@@ -99,7 +99,7 @@ class FlowNode(object):
             while uniqid in self.uniqueids:
                 uniqid = urandom(4)
             self.uniqueids.append(uniqid)
-            self.outstanding_inflow[uniqid] = (prvpr, theirid)
+            self.outstanding_inflow[uniqid] = (prvpr, theirid, 12)
             
         else:
             del self.outstanding_outflow[uniqid]
@@ -170,7 +170,7 @@ class FlowNode(object):
         chc = None
         trgts = []
         for k,v in self.outstanding_inflow.items():
-            prvpr, theirid = v
+            prvpr, theirid, _ = v
             _,trgt,_ = self.inflow[prvpr][theirid]
             if trgt not in trgts:
                 trgts.append(trgt)
@@ -190,7 +190,29 @@ class FlowNode(object):
             return None
         return random.sample(self.targets.items(), 1)[0]
     def remove_peer(self, pid):
-        return # NOT IMPLEMENTED
+        if self.next.get(pid) != None:
+            to_remove = []
+            for k,v in self.outflow.items():
+                if v[0] == pid:
+                    to_remove.append(k)
+            for t in to_remove:
+                self.remove_outflow(t)
+            del self.next[pid]
+            
+        elif self.inflow.get(pid) != None:
+            to_remove = []
+            dv = self.inflow[pid]
+            for k,v in dv.items():
+            
+                to_remove.append(k)
+            for t in to_remove:
+                self.remove_inflow(pid, t)
+            del self.prev[pid]
+            
+        elif self.same.get(pid) != None:
+            del self.same[pid]
+        
+        return
     def update_peer(self, pid, target, cost, dflow):
         if self.next.get(pid) != None:
             self.next[pid].dist_to_targ[target] = cost
@@ -336,7 +358,7 @@ class FlowNode(object):
         if self.outstanding_outflow.get(curr_id) != None:
             self.outstanding_outflow[curr_id] = (self.outstanding_outflow[curr_id][0], nw_cost)
         return curr_cost != nw_cost
-    def remove_outflow(self, myid):
+    def remove_outflow(self, myid, set_val = 12):
         
         if self.outflow.get(myid) == None:
             return
@@ -345,7 +367,7 @@ class FlowNode(object):
         if self.outstanding_outflow.get(myid) == None:
             theirid, them = self.map[myid]
             del self.outflow[myid]
-            self.outstanding_inflow[myid] = (them, theirid)
+            self.outstanding_inflow[myid] = (them, theirid,set_val)
         else:
             nxt,trgt,cst = self.outflow[myid]
             del self.outstanding_outflow[myid]
@@ -405,7 +427,7 @@ class FlowNode(object):
             self.inflow[new_prv] = dict()
         self.inflow[new_prv][new_id] = (myid, target, new_cost)
         if self.outstanding_inflow.get(myid) != None:
-            self.outstanding_inflow[myid] = (new_prv, new_id)
+            self.outstanding_inflow[myid] = (new_prv, new_id, 12)
     
         
                     

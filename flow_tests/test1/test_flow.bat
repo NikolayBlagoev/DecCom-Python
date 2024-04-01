@@ -1,9 +1,9 @@
-Set COUNTER=1
+Set COUNTER=2
 :x
 
 
 echo %Counter%
-if "%Counter%"=="33" (
+if "%Counter%"=="38" (
     echo "END!"
 ) else (
     timeout /t 1

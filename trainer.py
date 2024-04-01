@@ -89,7 +89,7 @@ class Pipe2(nn.Module):
 protocol = DefaultProtocol()
 gossip = KademliaDiscovery([],interval=5)
 gossip.set_lower(protocol)
-stream = StreamProtocol(True)
+stream = StreamProtocol(False)
 stream.set_lower(gossip)
 net = None
 loss_fn = None
