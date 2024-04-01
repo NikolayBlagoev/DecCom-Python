@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "D:\Games\PyDec\DecCom-Python\deccom\protocols\defaultprotocol.py", line 51, in call_callback
+    self.callback(addr,data)
+  File "D:\Games\PyDec\DecCom-Python\deccom\protocols\peerdiscovery\kademliadiscovery.py", line 191, in process_datagram
+    msg += self.finders[unique_id].look_for
+KeyError: b'g3\xb1\xde\xa5\x1b;\x03'
+Traceback (most recent call last):
+  File "D:\Games\PyDec\DecCom-Python\deccom\protocols\defaultprotocol.py", line 51, in call_callback
+    self.callback(addr,data)
+  File "D:\Games\PyDec\DecCom-Python\deccom\protocols\peerdiscovery\kademliadiscovery.py", line 191, in process_datagram
+    msg += self.finders[unique_id].look_for
+KeyError: b'\xa7\xa4^S\xe9\xf5L\x1d'
+Traceback (most recent call last):
+  File "D:\Games\PyDec\DecCom-Python\deccom\protocols\defaultprotocol.py", line 51, in call_callback
+    self.callback(addr,data)
+  File "D:\Games\PyDec\DecCom-Python\deccom\protocols\peerdiscovery\kademliadiscovery.py", line 191, in process_datagram
+    msg += self.finders[unique_id].look_for
+KeyError: b'g3\xb1\xde\xa5\x1b;\x03'
+Traceback (most recent call last):
+  File "D:\Games\PyDec\DecCom-Python\deccom\protocols\defaultprotocol.py", line 51, in call_callback
+    self.callback(addr,data)
+  File "D:\Games\PyDec\DecCom-Python\deccom\protocols\peerdiscovery\kademliadiscovery.py", line 191, in process_datagram
+    msg += self.finders[unique_id].look_for
+KeyError: b'g3\xb1\xde\xa5\x1b;\x03'

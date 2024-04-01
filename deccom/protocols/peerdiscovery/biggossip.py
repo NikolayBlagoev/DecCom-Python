@@ -104,11 +104,14 @@ class BigGossip(AbstractPeerDiscovery):
             prs = list(self.peers.items())
             if len(prs) > 0:
                 prs = random.sample(prs,min(len(prs),self.k))
-                msg = bytearray([BigGossip.PULLED])
-                for k,v in prs:
-                    msg += bytes(v)
-                loop = asyncio.get_event_loop()
-                loop.create_task(self._lower_sendto(msg, addr))
+                i = 0
+                while i < len(prs):
+                    msg = bytearray([BigGossip.PULLED])
+                    for k,v in prs[i:i+10]:
+                        msg += bytes(v)
+                    loop = asyncio.get_event_loop()
+                    loop.create_task(self._lower_sendto(msg, addr))
+                    i += 10
 
         elif data[0] == BigGossip.PULLED:
             i = 1
