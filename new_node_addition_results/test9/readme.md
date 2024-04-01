@@ -1,4 +1,4 @@
-12 stages 8 nodes per stage 
+8 stages 4 nodes per stage 
 1 source (capacity of 30)
 capacities: between 1 and 5
 costs: 20 to 100

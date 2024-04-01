@@ -32,6 +32,43 @@ class test_byte_reader(unittest.TestCase):
         self.assertEqual(peer.pub_key, peer2.pub_key)
         self.assertEqual(peer.addr, peer2.addr)
         self.assertEqual(peer.tcp, peer2.tcp)
+    
+    def test_from_to_bytes_peer_with_string(self):
+        peer = Peer(("127.0.0.1", 10015), pub_key="hello")
+        peer2, i = Peer.from_bytes(bytes(peer))
+        self.assertEqual(peer.id_node, peer2.id_node)
+        self.assertEqual(peer.pub_key, peer2.pub_key)
+        self.assertEqual(peer.addr, peer2.addr)
+        self.assertEqual(peer.tcp, peer2.tcp)
+
+
+    def test_from_to_bytes_peer_with_tcp(self):
+        peer = Peer(("127.0.0.1", 10015),tcp=42)
+        peer2, i = Peer.from_bytes(bytes(peer))
+        self.assertEqual(peer.id_node, peer2.id_node)
+        self.assertEqual(peer.pub_key, peer2.pub_key)
+        self.assertEqual(peer.addr, peer2.addr)
+        self.assertEqual(peer.tcp, peer2.tcp)
+
+    def test_from_to_bytes_multiple_peers(self):
+        peer_l = []
+        msg = bytearray()
+        for i in range(10):
+            peer = Peer((f"{i*4}.{i*5}.2.5", i*10),tcp=i, pub_key=str(i))
+            peer_l.append(peer)
+            msg += bytes(peer)
+        result = bytes(msg)
+        i = 0
+        k = 0
+        while i < len(result):
+
+            peer2, offs = Peer.from_bytes(result[i:])
+            self.assertEqual(peer_l[k].id_node, peer2.id_node)
+            self.assertEqual(peer_l[k].pub_key, peer2.pub_key)
+            self.assertEqual(peer_l[k].addr, peer2.addr)
+            self.assertEqual(peer_l[k].tcp, peer2.tcp)
+            k += 1
+            i += offs
 
 
 if __name__ == '__main__':

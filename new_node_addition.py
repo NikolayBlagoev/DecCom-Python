@@ -50,8 +50,9 @@ def add_node(g: Graph,ttl,p,i,indx):
 
 N = 97
 d['size'] = [N]
-S = 12
-to_add = 5
+S = 8
+to_add = 1
+to_add = min(to_add, S)
 d['stages'] = [S]
 cost_map = []
 for _ in range(N):
@@ -62,7 +63,7 @@ workload = []
 for i in range(dataholder_count):
     dataholders.append(i)
     ttl = i+1
-    workload.append(30)
+    workload.append(6000)
 
 per_stage = (N - dataholder_count)//S
 
@@ -75,7 +76,7 @@ for i in range(S):
     mx_send = 0
     for _ in range(per_stage):
         tmp.append(ttl)
-        workload.append(random.randint(1,5))
+        workload.append(random.randint(1,20))
         for p in prv:
             print("update")
             cost_map[p][ttl] = random.randint(20,100)
@@ -122,7 +123,7 @@ for i, c in enumerate(caps):
 proposed = []
 
 for _ in range(20):
-    x = random.randint(1,5)
+    x = random.randint(1,20)
     proposed.append((random.randint(20,100),x, x*10 + random.randint(50,100)))
 print(f"Current throughput {curr_flow}")
 d['before flow'] = [curr_flow]
@@ -170,23 +171,7 @@ for i in range(to_add):
     if choice == None:
         break
     chosen_best.append(choice)
-    # cost_per_mb = cost_current/curr_flow
-    # d['chosen cost per batch'] = [cost_per_mb]
-    # d['chosen flow'] = curr_flow
-    # d['chosen cost'] = cost_current
-    print(f"Cost per microbatch {cost_per_mb}")
 
-# for candidate, p in enumerate(proposed):
-#     t_new = min(cap_other, curr_flow / max_bf + p[0])
-#     c_new = 2*(mx_cost_curr - 2*mx_cost_curr/S + max(2*mx_cost_curr/S, 2*p[1])) + max(max(max_costs_per_stage), p[2])
-#     incr = (cost_current / curr_flow) - (c_new / t_new)
-#     print(candidate,incr, curr_flow / max_bf + p[0], p[0], cap_other, c_new, cost_current, p[1], p[2], max(max_costs_per_stage))
-#     if incr > best_increase:
-#         print("choosing candidate",candidate)
-#         best_increase = incr
-#         best_idx = p
-#         best_mx = p[1]*2 + p[2]
-    # elif 
 
 print(f"best new cost estimate of {best_increase}")
 
@@ -246,4 +231,4 @@ d['chosen flow'] = curr_flow
 d['chosen cost'] = cost_current
 print(d)
 df = pd.DataFrame(data=d)
-df.to_csv("results.csv", mode='a', header=False, index=1)
+df.to_csv("results3.csv", mode='a', header=False, index=1)

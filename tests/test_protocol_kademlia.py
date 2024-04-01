@@ -87,7 +87,7 @@ class test_protocol_kademlia(unittest.IsolatedAsyncioTestCase):
 
 class test_protocol_kademlia_2(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.p1 = Peer(None, pub_key=str(0))
+        self.p1 = Peer(None, pub_key="0")
         self.loop = asyncio.new_event_loop()
         NetworkStub.connections = {}
         pl = NetworkStub()
@@ -102,7 +102,7 @@ class test_protocol_kademlia_2(unittest.IsolatedAsyncioTestCase):
         
             
 
-        p1= Peer(None, id_node= bytes(bytearray([int.from_bytes(b'\xff', byteorder="big") for _ in range(31)] + [0])), pub_key="10")
+        p1= Peer(None,  pub_key="10")
         prlist.append(p1)
         pl = NetworkStub()
         k1 = KademliaDiscovery([self.p1], interval=3, k = 1)
@@ -110,8 +110,8 @@ class test_protocol_kademlia_2(unittest.IsolatedAsyncioTestCase):
         kls.append(k1)
         n3 = NodeStub(p1, k1)
         await n3.listen()
-
-        p2 = Peer(None, id_node= bytes(bytearray([int.from_bytes(b'\x00', byteorder="big") for _ in range(32)])), pub_key="00")
+        print(p1.addr)
+        p2 = Peer(None, pub_key="00")
         prlist.append(p2)
         pl = NetworkStub()
         k2 = KademliaDiscovery([self.p1], interval=3)
@@ -119,23 +119,25 @@ class test_protocol_kademlia_2(unittest.IsolatedAsyncioTestCase):
         kls.append(k2)
         n2 = NodeStub(p2, k2)
         await n2.listen()
+        print(p2.addr)
         await asyncio.sleep(5)
-        
-        await k2.find_peer(bytes(p1.id_node))
+        print("loooking for p1",p1.pub_key)
+        await k2.find_peer(p1.id_node)
         self.assertEqual(p1.id_node, k2.get_peer(bytes(p1.id_node)).id_node)
         
 
-        p3 = Peer(None, id_node= bytes(bytearray([int.from_bytes(b'\xff', byteorder="big") for _ in range(32)])), pub_key="1")
+        p3 = Peer(None,  pub_key="1")
         prlist.append(p3)
         pl = NetworkStub()
         k3 = KademliaDiscovery([self.p1], interval=3)
         k3.set_lower(pl)
         kls.append(k3)
         n2 = NodeStub(p3, k3)
+        print("starting n2...")
         await n2.listen()
         await asyncio.sleep(5)
-
-        await k1.find_peer(bytes(p3.id_node))
+        print("looking for p3...")
+        await k1.find_peer(p3.id_node)
         
         self.assertEqual(p3.id_node, k1.get_peer(bytes(p3.id_node)).id_node)
 
@@ -146,11 +148,11 @@ class test_protocol_kademlia_2(unittest.IsolatedAsyncioTestCase):
         
         
         
-#         self.n1.set_listen(False)
-#         print("lookin...")
-#         await asyncio.sleep(5)
-#         print("digging in...", p2.id_node)
-#         await k1.find_peer(bytes(p2.id_node))
+        # self.n1.set_listen(False)
+        # print("lookin...")
+        # await asyncio.sleep(5)
+        # print("digging in...", p2.id_node)
+        # await k1.find_peer(bytes(p2.id_node))
         
 #         self.assertEqual(p2.id_node, k1.get_peer(bytes(p2.id_node)).id_node)
 #         self.n1.set_listen(True)

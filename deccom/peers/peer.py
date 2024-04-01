@@ -27,71 +27,72 @@ class Peer(object):
         # print("pub_key",pub_key)
         pass
 
-
     # |------------------------|
-    # | Length of id_node (4B) |
+    # | Control header (1B)    |
     # |------------------------|
-    # | id_node (variable)     |
+    # | pub_key (MAX 63B)      |
     # |------------------------|
-    # | Length of pub_key (4B) |
-    # |------------------------|
-    # | pub_key (variable)     |
-    # |------------------------|
-    # | Type of pub_key (1B)   |
-    # |------------------------|
-    # | Length of addr[0] (4B) |
-    # |------------------------|
-    # | addr[0] (variable)     |
+    # | addr[0] (4B)           |
     # |------------------------|
     # | addr[1] (2B)           |
     # |------------------------|
-    # | tcp (2B, if present)   |
+    # | tcp (2B)               |
     # |------------------------|
+    # Control header contains (LSB FIRST):
+    # 6 Bits size of pub_key
+    # 1 Bits type of pub_key
+    # 1 Bit if TCP is present
+
 
     def __bytes__(self)->bytes:
         writer = byte_writer()
-        writer.write_variable(4, self.id_node)
-
+        control_header = 0
+        pb_key_encoded = None
         if isinstance(self.pub_key, bytes):
-            writer.write_variable(4, self.pub_key).write(1,1)
+            pb_key_encoded = self.pub_key
+            
         elif isinstance(self.pub_key, str):
-            writer.write_variable(4, self.pub_key.encode("utf-8")).write(1,2)
+            pb_key_encoded = self.pub_key.encode("utf-8")
+            control_header += 64
         else:
             raise Exception("INVALID PUBLIC KEY")
-
-        writer.write_variable(4, self.addr[0].encode("utf-8")).write(2, self.addr[1])
-
+        control_header += len(pb_key_encoded)
+        # print("CONTROL HEADER", control_header, "lnpubkey", len(pb_key_encoded),".")
         if self.tcp != None:
-            writer.write(2, self.tcp)
-        else:
-            writer.write(2, 0)
-
+            control_header += 128
+        writer.write_int(1, control_header)
+        writer.write_raw(pb_key_encoded)
+        writer.write_ip(self.addr[0])
+        writer.write_int(2, self.addr[1])
+        if self.tcp != None:
+            writer.write_int(2, self.tcp)
         return writer.bytes()
 
     @staticmethod
     def from_bytes(b: bytes) -> tuple["Peer", int]:
         # print(len(b))
         reader = byte_reader(b)
+        control_header = reader.read_next_int(1)
+        ln_pub_key = control_header % 64
+        # print("CONTROL HEADER", control_header, "lnpubkey", ln_pub_key,".")
+        control_header = control_header // 64
+        type_of_key = control_header % 2
+        tcp_present = control_header // 2 == 1
+        pub_key = reader.read_next(ln_pub_key)
+        ip = reader.read_ip()
+        port = reader.read_next_int(2)
 
-        id_node = reader.read_next_variable(4)
-        pub_key_bytes =  reader.read_next_variable(4)
-        pub_key_version = int.from_bytes(reader.read_next(1), byteorder="big")
-        ip = reader.read_next_variable(4).decode("utf-8")
-        port = int.from_bytes(reader.read_next(2), byteorder="big")
-        tcp: Union[int, None] = int.from_bytes(reader.read_next(2), byteorder="big")
-
-        pub_key: Union[bytes, str]
-        if pub_key_version == 1:
-            pub_key = pub_key_bytes
-        elif pub_key_version == 2:
-            pub_key = pub_key_bytes.decode("utf-8")
+        if type_of_key == 0:
+            pub_key = pub_key
+        elif type_of_key == 1:
+            pub_key = pub_key.decode("utf-8")
         else:
-            raise TypeError("Error parsing bytes. Malformed version number detected.")
-
-        if tcp == 0:
-            tcp = None
-
-        return Peer((ip,port), pub_key, tcp ,id_node), reader.get_head() #type: ignore
+            raise TypeError("Error parsing bytes. Malformed version number detected.",type_of_key)
+        tcp = None
+        if tcp_present:
+            tcp = reader.read_next_int(2)
+        
+        return Peer((ip,port), pub_key = pub_key, tcp = tcp), reader.get_head() #type: ignore
 
 
 
@@ -110,11 +111,27 @@ class byte_reader:
         self.check_health()
         return self.data[self.head-length:self.head]
 
+    def read_next_int(self, length: int) -> int:
+        self.head += length
+        self.check_health()
+        return int.from_bytes(self.data[self.head-length:self.head], byteorder="big")
+
+    def read_ip(self) -> str:
+        ret = ""
+        for _ in range(4):
+            
+            ret += str(self.read_next_int(1)) + "."
+
+        return ret[:-1]
+
+
+
     def check_health(self):
         if self.head > len(self.data):
-            raise IndexError("Error parsing data. reading at:", self.head, "/", len(self.data))
+            raise IndexError("Error parsing data. reading at:", self.head, "but data has length", len(self.data))
     def get_head(self):
         return self.head
+    
 
 class byte_writer:
     def __init__(self):
@@ -125,7 +142,8 @@ class byte_writer:
         self.data += data
         return self
 
-    def write(self, length:int, data):
+    def write_int(self, length:int, data: int):
+        
         self.data += data.to_bytes(length, byteorder="big")
         return self
 
@@ -134,3 +152,15 @@ class byte_writer:
 
     def bytes(self):
         return bytes(self.data)
+    
+    def write_ip(self, ip: str):
+        ret = 0
+        split_ip = ip.split(".")
+        for part in split_ip:
+            ret *= 256
+            ret += int(part)
+            
+        
+        self.data += ret.to_bytes(4, byteorder="big")
+        return self
+
