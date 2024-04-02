@@ -313,7 +313,7 @@ class SwarmProtocol(AbstractProtocol):
                     print("ADDING TO SAME STAGE")
             elif stage == (self.stage + 1) % self.pipeline_size:
                 if self.next_stage.get(nodeid) == None:
-                    self.next_stage[nodeid] = PeerClassification(nodeid, 15000.0)
+                    self.next_stage[nodeid] = PeerClassification(nodeid, 0.5)
             return
         elif data[0] == SwarmProtocol.COMPLETE:
             # print("COMPLETE")
