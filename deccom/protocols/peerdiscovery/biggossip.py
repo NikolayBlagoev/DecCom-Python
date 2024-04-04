@@ -1,14 +1,10 @@
 import asyncio
-from collections import OrderedDict
-import os
 import random
 from typing import Callable, Union
-from deccom.cryptofuncs.hash import SHA256
 from deccom.peers.peer import Peer
 from deccom.protocols.peerdiscovery.abstractpeerdiscovery import AbstractPeerDiscovery
-from ._kademlia_routing import BucketManager
 from deccom.protocols.wrappers import *
-from ._finder import Finder
+
 class BigGossip(AbstractPeerDiscovery):
     INTRODUCTION = int.from_bytes(b'\xe1', byteorder="big") # english opening king's variation
     RESPOND_FIND = int.from_bytes(b'\xc4', byteorder="big")
@@ -32,7 +28,7 @@ class BigGossip(AbstractPeerDiscovery):
         self.warmup = 0
         self.max_warmup = 60
         self.searches: dict[bytes,bytes] = dict()
-        self.finders: dict[bytes, Finder] = dict()
+        
     async def start(self, p: Peer):
         await super().start(p)
         
@@ -129,7 +125,36 @@ class BigGossip(AbstractPeerDiscovery):
                     loop.create_task(self._lower_sendto(msg, other.addr))
                     
         
+        elif data[0] == BigGossip.FIND:
             
+            if self.sent_finds.get(data) != None:
+                return
+
+            seeker, i = Peer.from_bytes(data[1:])
+
+            id = data[i+1:]
+            # print(seeker.id_node," is looking for ",id)
+            self.sent_finds[data] = i
+            if id == self.peer.id_node:
+                # print("THATS ME")
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.introduce_to_peer(seeker))
+
+                
+                self.connection_approval(addr,seeker,self.add_peer,self.ban_peer)
+            elif self.peers.get(id) == None:
+                l = list(self.get_peers())[:10]
+                for p in l:
+                    if self.get_peers().get(p) is None:
+                        continue
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self._lower_sendto(
+                        data, self.peers[p].addr))
+
+            else:
+                peer = self.peers.get(id)
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._lower_sendto(data, peer.addr))    
         elif data[0] == BigGossip.ASK_FOR_ID:
             # print("ASKING FOR ID")
             msg = bytearray([BigGossip.INTRODUCTION])
@@ -159,8 +184,29 @@ class BigGossip(AbstractPeerDiscovery):
     
     
 
-    async def find_peer(self, id) -> Peer:
+    async def _find_peer(self, fut, id: bytes):
+        self.peer_crawls[id] = fut
+        msg = bytearray([BigGossip.FIND])
+        
+        msg = msg + bytes(self.peer) + id
+        l = list(self.get_peers())
+        for p in l:
+            if self.get_peers().get(p) is None:
+                continue
+            await self._lower_sendto(msg, self.peers[p].addr)
+
         return
+
+    async def find_peer(self, id) -> Peer:
+        if self.peers.get(id) == None:
+            if self.peer_crawls.get(id) == None:
+                loop = asyncio.get_running_loop()
+                fut = loop.create_future()
+                await self._find_peer(fut, id)
+                await fut
+            else:
+                await self.peer_crawls.get(id)
+        return self.get_peer(id)
         
     def get_peer(self, id) -> Union[Peer,None]:
         return self.peers.get(id)

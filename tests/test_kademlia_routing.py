@@ -1,4 +1,3 @@
-import asyncio
 import unittest
 from deccom.protocols.peerdiscovery._kademlia_routing import BucketManager
 

@@ -1,9 +1,6 @@
-import asyncio
 from typing import Callable, Union
 from deccom.protocols.abstractprotocol import AbstractProtocol
-from deccom.protocols.defaultprotocol import DefaultProtocol
 from deccom.peers import Peer
-from random import randint, sample
 from deccom.protocols.wrappers import *
 
 class AbstractPeerDiscovery(AbstractProtocol):

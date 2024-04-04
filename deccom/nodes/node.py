@@ -1,5 +1,4 @@
 import asyncio
-from asyncio import exceptions
 from typing import Callable
 from deccom.cryptofuncs.hash import SHA256
 from deccom.peers.peer import Peer

@@ -1,7 +1,5 @@
 import asyncio
-import time
 import unittest
-from deccom.peers.peer import byte_reader
 from deccom.peers.peer import Peer
 from deccom.protocols.peerdiscovery.kademliadiscovery import KademliaDiscovery
 from stubs.network_stub import NetworkStub

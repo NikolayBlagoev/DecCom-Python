@@ -2,7 +2,7 @@ import random
 from deccom.cryptofuncs.hash import SHA256
 from deccom.cryptofuncs.signatures import gen_key, to_bytes
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from typing import Union
+
 
 from deccom.utils.common import byte_reader, byte_writer
 

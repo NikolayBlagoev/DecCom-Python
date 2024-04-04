@@ -1,5 +1,5 @@
 import unittest
-from deccom.peers.peer import byte_reader
+from deccom.utils.common import byte_reader
 from deccom.peers.peer import Peer
 
 class test_byte_reader(unittest.TestCase):

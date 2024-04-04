@@ -1,7 +1,5 @@
 import asyncio
 from datetime import datetime
-import random
-from deccom.cryptofuncs.hash import SHA256
 from deccom.utils.common import ternary_comparison
 from asyncio import exceptions
 from typing import Any, Callable, List, Union
@@ -60,7 +58,7 @@ class StreamProtocol(AbstractProtocol):
         
     
     async def handle_connection(self, reader: asyncio.StreamReader,writer: asyncio.StreamWriter, node_id: Any = None, addr: Any = None):
-        print("CONNECTION FROM PEER",  writer.get_extra_info('peername'))
+        #print("CONNECTION FROM PEER",  writer.get_extra_info('peername'))
         addr = writer.get_extra_info('peername')
         try:
             data = await  asyncio.wait_for(reader.readline(), timeout=10)
@@ -108,43 +106,63 @@ class StreamProtocol(AbstractProtocol):
         self.connected_callback(addr,peer)
         return
     
-    async def open_connection(self, remote_ip, remote_port, node_id: bytes, s =  None):
+    async def open_connection(self, remote_ip, remote_port, node_id: bytes, port_listen =  None):
         # print("connection to",remote_port, node_id)
         if node_id==self.peer:
             print("OPENING TO SELF???")
             return False
         
         if remote_port == None:
-            print("empty remote port")
+            
             return False
-        if self.connections.get(node_id) == None and self.await_connections.get(node_id) != None and not self.await_connections[node_id].done():
+        if self.connections.get(node_id) == None and self.await_connections.get(node_id) != None:
+            
             await self.await_connections[node_id]
+            
         
         if self.connections.get(node_id) != None:
             print("duplicate connection OPENED")
             self.connections.get(node_id).using += 1
             return True
+        loop = asyncio.get_event_loop()
         
-        if s == None:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.await_connections[node_id] = loop.create_future()
+        
+        
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        
+        if socket.SO_REUSEPORT != None:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1) 
+        else:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
-            s.bind((self.peer.addr[0], self.peer.tcp))
-        self.await_connections[node_id] = asyncio.Future()
+
+        
+        
+        s.bind((self.peer.addr[0], self.peer.tcp if port_listen == None else port_listen))
+        
         try:
-            print(remote_ip, remote_port)
+            
             s.connect((remote_ip,remote_port))
-            reader, writer = await asyncio.wait_for(asyncio.open_connection(sock = s), timeout=4)
+            reader, writer = await asyncio.wait_for(asyncio.open_connection(sock = s), timeout=10)
             if self.locks.get(node_id) == None:
                 self.locks[node_id] = asyncio.Lock()
         except ConnectionRefusedError as e:
             with open(f"log{self.peer.pub_key}.txt", "a") as log:
                 log.write("connection refused\n")
             self.await_connections[node_id].set_result(False)
-            print("BROKEN SOMETHING", e)
+            s.close()
+            s.shutdown(0)
+            print("BROKEN SOMETHING ?")
+            return False
+        except asyncio.TimeoutError as e:
+            print("timed out...")
+            print(e.with_traceback())
+            s.close()
+            s.shutdown(0)
             return False
         self.connections[node_id] = DictItem(reader,writer,None,1)
         self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,(remote_ip,remote_port)))
-        print("introducing myself :)")
+        #print("introducing myself :)")
         async with self.locks[node_id]:
             writer.write(b'\xe4\xe5\xf3\xc6')
             writer.write(self.peer.id_node)
@@ -152,7 +170,6 @@ class StreamProtocol(AbstractProtocol):
             
             await writer.drain()
         self.await_connections[node_id].set_result(True)
-        print(self.connections)
         #del self.await_connections[node_id]
         self.connections.get(node_id).using += 1
         return True
@@ -179,7 +196,7 @@ class StreamProtocol(AbstractProtocol):
     async def listen_for_data(self, reader: asyncio.StreamReader, node_id = None, addr = None):
         
         # seqrand = random.randint(1,40000)
-        print("listening for data")
+        #print("listening for data")
         try:
             data = await reader.read(32)
         except (ConnectionResetError, BrokenPipeError) as e:
@@ -232,7 +249,7 @@ class StreamProtocol(AbstractProtocol):
         
         self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,addr))
     async def send_stream(self, node_id, data):
-        print(self.connections)
+        
         if self.connections.get(node_id) == None: 
             print("CANT FIND???")
             return
@@ -249,6 +266,7 @@ class StreamProtocol(AbstractProtocol):
     def set_stream_close_callback(self, callback):
         self.stream_close_callback = callback    
     async def _caller(self,data,node_id,addr):
+        print("received data... ", len(data))
         self.stream_callback(data,node_id,addr)
     @bindfrom("stream_callback")
     def process_data(self,data,node_id,addr):

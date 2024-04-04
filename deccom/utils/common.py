@@ -4,7 +4,9 @@ def find_open_port():
     ret = 10010
     with socket() as s:
         s.bind(('',0))
+
         ret = s.getsockname()[1]
+        s.close()
     return ret
 
 def ternary_comparison(b1,b2):

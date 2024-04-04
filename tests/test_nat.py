@@ -1,5 +1,4 @@
 import asyncio
-import time
 import unittest
 from deccom.peers.peer import byte_reader
 from deccom.peers.peer import Peer

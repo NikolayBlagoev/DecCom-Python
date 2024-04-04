@@ -19,7 +19,10 @@ class StreamNode(Node):
         self.peer_reads = dict()
         self.peer_writes = dict()
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
+        if socket.SO_REUSEPORT != None:
+            self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1) 
+        else:
+            self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  
         self.s.bind((ip_addr, tcp_port))
         if ip_addr == "0.0.0.0":
             self.peer.addr = (str(socket.gethostbyname(socket.gethostname())), self.port)

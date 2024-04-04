@@ -5,9 +5,9 @@ from typing import Callable, Union
 from deccom.cryptofuncs.hash import SHA256
 from deccom.peers.peer import Peer
 from deccom.protocols.peerdiscovery.abstractpeerdiscovery import AbstractPeerDiscovery
-from ._kademlia_routing import BucketManager
+from deccom.protocols.peerdiscovery._kademlia_routing import BucketManager
 from deccom.protocols.wrappers import *
-from ._finder import Finder
+from deccom.protocols.peerdiscovery._finder import Finder
 class KademliaDiscovery(AbstractPeerDiscovery):
     INTRODUCTION = int.from_bytes(b'\xe1', byteorder="big") # english opening king's variation
     RESPOND_FIND = int.from_bytes(b'\xc4', byteorder="big")
