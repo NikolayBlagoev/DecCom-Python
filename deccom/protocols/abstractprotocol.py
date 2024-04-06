@@ -1,18 +1,21 @@
 import asyncio
 from typing import Any, Callable
+from deccom.cryptofuncs.hash import SHA256
 from deccom.peers.peer import Peer
 from deccom.protocols.defaultprotocol import DefaultProtocol
 from deccom.protocols.wrappers import *
 
 
 class AbstractProtocol(object):
+
     required_lower = ["sendto", "start", "callback"]
+
     offers = {  
                 "sendto": "sendto",
                 "callback": "callback",
-                "process_datagram": "process_datagram",
+                "datagram_received": "datagram_received",
                 }
-    bindings = dict({"_lower_start":  "start", "_lower_sendto":  "sendto", "process_datagram": "set_callback"})
+    bindings = dict({"_lower_start":  "start", "_lower_sendto":  "sendto", "datagram_received": "callback"})
     
    
     def check_if_have(submodule, attr)->bool:
@@ -50,6 +53,16 @@ class AbstractProtocol(object):
         else:
             return getattr(submodule,attr)
         return None
+    
+    def process_datagram(self, addr, data):
+        
+        return self.callback(addr,data)
+    
+    async def send_datagram(self, msg: bytes, addr: tuple[str,int]):
+
+        await self._lower_sendto(self.uniqueid + msg, addr)
+
+    
     def set_if_have(submodule,attr,val):
         
         if not hasattr(submodule,attr):
@@ -82,14 +95,14 @@ class AbstractProtocol(object):
         self.submodule = submodule
         self.callback = callback
         self._taken = dict()
-        self.loop = asyncio.get_event_loop()
-    
-    def get_loop(self):
-        return self.loop
+        self.uniqueid = SHA256(self.__class__.__name__)[-8:]
     
     @bindfrom("callback")    
-    def process_datagram(self, addr:tuple[str,int],data:bytes):
-        return self.callback(addr,data)
+    def datagram_received(self, addr:tuple[str,int],data:bytes):
+        if data[:8] == self.uniqueid:
+            return self.process_datagram(addr, data[8:])
+        else:
+            return self.callback(addr,data)
         
     
     @bindto("sendto")

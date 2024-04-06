@@ -8,8 +8,8 @@ class TransportStub():
         self.addr = addr
         self.nat: NAT = nat
         return
-    def sendto(self, data, addr):
-        receiving: NAT = NatStub.connections.get(addr[0])
+    def sendto(self, data, addr, ntstb):
+        receiving: NAT = ntstb.connections.get(addr[0])
         if receiving == None:
             return
         
@@ -70,12 +70,12 @@ class NatStub():
     PONG_b = b'\xd5'
     PING = int.from_bytes(PING_b, byteorder="big")
     PONG = int.from_bytes(PONG_b, byteorder="big")
-    connections = {}
-    def __init__(self, callback: Callable[[tuple[str,int], bytes], None] = lambda addr, data: ...):
+    
+    def __init__(self, connections, callback: Callable[[tuple[str,int], bytes], None] = lambda addr, data: ...):
         self.transport = None
         self.callback = callback
         self.pings = dict()
-
+        self.connections = connections
         self._taken = dict()
         self.listen = True
         self.addr = None
@@ -83,11 +83,11 @@ class NatStub():
         self.listen = state
     def initialise(self,addr):
         print(addr)
-        if NatStub.connections.get(addr[0]) == None:
-            NatStub.connections[addr[0]] = NAT(addr[0] != "0.0.0.0")
+        if self.connections.get(addr[0]) == None:
+            self.connections[addr[0]] = NAT(addr[0] != "0.0.0.0")
             
-        NatStub.connections[addr[0]].register(addr,self.processor)
-        self.transport = TransportStub(addr,NatStub.connections[addr[0]])
+        self.connections[addr[0]].register(addr,self.processor)
+        self.transport = TransportStub(addr,self.connections[addr[0]])
         self.addr = addr
     async def processor(self, data, addr):
         if not self.listen:
@@ -102,7 +102,7 @@ class NatStub():
     def datagram_received(self, data, addr):
         
         # print("from:", addr, "data", data)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         if len(data) < 2:
             print("invalid msg received")
             return
@@ -136,14 +136,14 @@ class NatStub():
         self.pings[msg_id] = (success, timeout)
         trmp = bytearray([NatStub.PING])
         trmp = trmp + bts
-        self.transport.sendto(trmp, addr=addr)
+        self.transport.sendto(trmp, addr,self)
         
         return
 
     async def handle_ping(self, addr, data):
         trmp = bytearray([NatStub.PONG])
         trmp = trmp + data
-        self.transport.sendto(trmp, addr=addr)
+        self.transport.sendto(trmp, addr,self)
         # print("sent pong",addr)
         return
 
@@ -167,5 +167,5 @@ class NatStub():
         # print("sending to",addr)
         trmp = bytearray(b'\x01')
         trmp = trmp + msg
-        self.transport.sendto(trmp, addr=addr)
+        self.transport.sendto(trmp, addr,self)
         # print("sent")

@@ -25,9 +25,9 @@ class test_bindings(unittest.TestCase):
         self.assertEqual(disc._lower_ping, lowest.send_ping)
         self.assertEqual(disc.connected_callback, stream.peer_connected)
         self.assertEqual(disc.disconnected_callback, stream.remove_peer)
-        self.assertEqual(lowest.callback, disc.process_datagram)
-        self.assertEqual(disc.callback, noise.process_datagram)
-        self.assertEqual(noise.callback, stream.process_datagram)
+        self.assertEqual(lowest.callback, disc.datagram_received)
+        self.assertEqual(disc.callback, noise.datagram_received)
+        self.assertEqual(noise.callback, stream.datagram_received)
         self.assertEqual(noise.approve_peer, disc.connection_approval)
     def test_binding_2(self):
         
@@ -46,9 +46,9 @@ class test_bindings(unittest.TestCase):
         self.assertEqual(disc._lower_ping, lowest.send_ping)
         self.assertEqual(disc.connected_callback, stream.peer_connected)
         self.assertEqual(disc.disconnected_callback, stream.remove_peer)
-        self.assertEqual(lowest.callback, disc.process_datagram)
-        self.assertEqual(disc.callback, noise.process_datagram)
-        self.assertEqual(noise.callback, stream.process_datagram)
+        self.assertEqual(lowest.callback, disc.datagram_received)
+        self.assertEqual(disc.callback, noise.datagram_received)
+        self.assertEqual(noise.callback, stream.datagram_received)
         self.assertEqual(noise.approve_peer, disc.connection_approval)
     def test_bad_binding(self):
         

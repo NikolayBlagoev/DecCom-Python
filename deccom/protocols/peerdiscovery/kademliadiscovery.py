@@ -36,7 +36,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         for p in self.bootstrap_peers:
             await self.introduce_to_peer(p)
             msg = bytearray([KademliaDiscovery.ASK_FOR_ID])
-            await self._lower_sendto(msg,p.addr)
+            await self.send_datagram(msg,p.addr)
         loop = asyncio.get_event_loop()
         loop.call_later(2, self.refresh_table)
     
@@ -55,7 +55,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 await self.introduce_to_peer(p)
                 await asyncio.sleep(1)
                 msg = bytearray([KademliaDiscovery.ASK_FOR_ID])
-                await self._lower_sendto(msg,p.addr)
+                await self.send_datagram(msg,p.addr)
             self.refresh_loop = loop.call_later(2, self.refresh_table)
             return
         rand_ids = []
@@ -74,7 +74,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 msg = bytearray([KademliaDiscovery.FIND ^ 1])
                 msg += unique_id
                 msg += self.peer.id_node
-                await self._lower_sendto(msg,p.addr)
+                await self.send_datagram(msg,p.addr)
             self.refresh_loop = loop.call_later(self.interval, self.refresh_table)
             return
 
@@ -89,7 +89,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 msg = bytearray([KademliaDiscovery.FIND ^ 1])
                 msg += unique_id
                 msg += ids
-                await self._lower_sendto(msg,p.addr)
+                await self.send_datagram(msg,p.addr)
 
         
         self.refresh_loop = loop.call_later(self.interval, self.refresh_table)
@@ -106,12 +106,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         # print("introducing to", peer.id_node)
         msg = bytearray([KademliaDiscovery.INTRODUCTION])
         msg = msg + bytes(self.peer)
-        await self._lower_sendto(msg, peer.addr)
-
-    async def sendto(self, msg, addr):
-        tmp = bytearray([1])
-        tmp = tmp + msg
-        return await self._lower_sendto(tmp, addr)
+        await self.send_datagram(msg, peer.addr)
       
     def process_datagram(self, addr: tuple[str, int], data: bytes):
         
@@ -145,7 +140,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 msg = bytearray([KademliaDiscovery.INTRODUCTION])
                 msg = msg + bytes(self.peer)
                 loop = asyncio.get_running_loop()
-                loop.create_task(self._lower_sendto(msg, addr))
+                loop.create_task(self.send_datagram(msg, addr))
             elif self.get_peer(id) != None and data[0] == KademliaDiscovery.FIND:
                 # print(self.peer.pub_key,"I KNOW THAT GUY!",self.get_peer(id).pub_key)
                 self.send_find_response(addr,[self.get_peer(id)],unique_id)
@@ -181,7 +176,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
             
             if self.searches.get(unique_id) != None:
                 for p in peers:
-                    if p.id_node == self.searches.get(unique_id) and p.id_node != self.peer.id_node:
+                    if p.id_node == self.searches.get(unique_id) and p.id_node != self.peer.id_node and self.finders.get(unique_id) != None:
                         
                         self._lower_heard_from(addr,p.addr)
                         loop = asyncio.get_running_loop()
@@ -190,7 +185,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                         msg += unique_id
                         msg += self.finders[unique_id].look_for
                         del self.finders[unique_id]
-                        loop.create_task(self._lower_sendto(msg, p.addr))
+                        loop.create_task(self.send_datagram(msg, p.addr))
                         
                         
                         return
@@ -202,7 +197,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                     loop = asyncio.get_running_loop()
                     loop.create_task(self.introduce_to_peer(p))
                     msg = bytearray([KademliaDiscovery.ASK_FOR_ID])
-                    loop.create_task(self._lower_sendto(msg,p.addr))
+                    loop.create_task(self.send_datagram(msg,p.addr))
             if self.finders.get(unique_id) != None:
                 self.finders[unique_id].add_peer(peers)
                 msg = bytearray([KademliaDiscovery.FIND if self.finders[unique_id].look_for != self.peer.id_node else KademliaDiscovery.FIND ^ 1])
@@ -212,7 +207,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 loop = asyncio.get_running_loop()
                 for p in l:
                     # print("sending to ", p.pub_key)
-                    loop.create_task(self._lower_sendto(msg, p.addr))
+                    loop.create_task(self.send_datagram(msg, p.addr))
 
                     
         
@@ -226,7 +221,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
 
             msg = msg + bytes(self.peer)
             loop = asyncio.get_running_loop()
-            loop.create_task(self._lower_sendto(msg, addr))
+            loop.create_task(self.send_datagram(msg, addr))
             
         else:
             return self.callback(addr, data[1:])
@@ -240,7 +235,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
             for p in best_guess[i:i+10]:
                 msg += bytes(p)
             loop = asyncio.get_running_loop()
-            loop.create_task(self._lower_sendto(msg, addr))
+            loop.create_task(self.send_datagram(msg, addr))
             i += 10
     async def send_ping(self, addr, success, fail, timeout):
         await self._lower_ping(addr, success, fail, timeout)
@@ -251,17 +246,17 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                 msg = bytearray([KademliaDiscovery.FIND ^ 1])
                 msg += unique_id
                 msg += self.peer.id_node if for_peer == None else for_peer
-                await self._lower_sendto(msg,p.addr)
+                await self.send_datagram(msg,p.addr)
             elif self.warmup < self.max_warmup:
                 msg = bytearray([KademliaDiscovery.FIND])
                 msg += unique_id
                 msg += self.peer.id_node if for_peer == None else for_peer
-                await self._lower_sendto(msg,p.addr)
+                await self.send_datagram(msg,p.addr)
             return
         msg = bytearray([KademliaDiscovery.FIND])
         msg += unique_id
         msg += self.searches[unique_id]
-        await self._lower_sendto(msg,p.addr)
+        await self.send_datagram(msg,p.addr)
     def successful_add(self, addr: tuple[str,int], p: Peer):
         
         #print(self.peer.pub_key," : adding peer", p.pub_key)
@@ -316,7 +311,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         l = self.finders[unique_id].find_peer()
         for p in l:
             # print("sending to ", p.pub_key)
-            await self._lower_sendto(msg, p.addr)
+            await self.send_datagram(msg, p.addr)
 
 
     async def find_peer(self, id) -> Peer:

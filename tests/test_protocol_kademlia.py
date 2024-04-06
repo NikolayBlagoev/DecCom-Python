@@ -7,10 +7,10 @@ from stubs.node_stub import NodeStub
 
 class test_protocol_kademlia(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        NetworkStub.connections = {}
+        self.connections = {}
         self.p1 = Peer(None, pub_key=str(0))
         self.loop = asyncio.new_event_loop()
-        pl = NetworkStub()
+        pl = NetworkStub(self.connections)
         kl = KademliaDiscovery()
         kl.set_lower(pl)
         self.n1 = NodeStub(self.p1, kl)
@@ -22,7 +22,7 @@ class test_protocol_kademlia(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(isinstance(self.p1.id_node, bytes))
 
         p2 = Peer(None)
-        pl = NetworkStub()
+        pl = NetworkStub(self.connections)
         
         k2 = KademliaDiscovery([self.p1])
         k2.set_lower(pl)
@@ -41,7 +41,7 @@ class test_protocol_kademlia(unittest.IsolatedAsyncioTestCase):
 
             p2 = Peer(None)
             prlist.append(p2)
-            pl = NetworkStub()
+            pl = NetworkStub(self.connections)
             k2 = KademliaDiscovery([self.p1])
             k2.set_lower(pl)
             kls.append(k2)
@@ -66,7 +66,7 @@ class test_protocol_kademlia(unittest.IsolatedAsyncioTestCase):
 
             p2 = Peer(None, pub_key=str(i))
             prlist.append(p2)
-            pl = NetworkStub()
+            pl = NetworkStub(self.connections)
             k2 = KademliaDiscovery([self.p1], interval=2)
             k2.set_lower(pl)
             kls.append(k2)
@@ -88,7 +88,7 @@ class test_protocol_kademlia_2(unittest.IsolatedAsyncioTestCase):
         self.p1 = Peer(None, pub_key="0")
         self.loop = asyncio.new_event_loop()
         NetworkStub.connections = {}
-        pl = NetworkStub()
+        pl = NetworkStub(self.connections)
         kl = KademliaDiscovery()
         kl.set_lower(pl)
         self.n1 = NodeStub(self.p1, kl)
@@ -102,7 +102,7 @@ class test_protocol_kademlia_2(unittest.IsolatedAsyncioTestCase):
 
         p1= Peer(None,  pub_key="10")
         prlist.append(p1)
-        pl = NetworkStub()
+        pl = NetworkStub(self.connections)
         k1 = KademliaDiscovery([self.p1], interval=3, k = 1)
         k1.set_lower(pl)
         kls.append(k1)
@@ -111,7 +111,7 @@ class test_protocol_kademlia_2(unittest.IsolatedAsyncioTestCase):
         print(p1.addr)
         p2 = Peer(None, pub_key="00")
         prlist.append(p2)
-        pl = NetworkStub()
+        pl = NetworkStub(self.connections)
         k2 = KademliaDiscovery([self.p1], interval=3)
         k2.set_lower(pl)
         kls.append(k2)
@@ -126,7 +126,7 @@ class test_protocol_kademlia_2(unittest.IsolatedAsyncioTestCase):
 
         p3 = Peer(None,  pub_key="1")
         prlist.append(p3)
-        pl = NetworkStub()
+        pl = NetworkStub(self.connections)
         k3 = KademliaDiscovery([self.p1], interval=3)
         k3.set_lower(pl)
         kls.append(k3)
@@ -142,7 +142,7 @@ class test_protocol_kademlia_2(unittest.IsolatedAsyncioTestCase):
         await k3.find_peer(bytes(p2.id_node))
         
         self.assertEqual(p2.id_node, k3.get_peer(bytes(p2.id_node)).id_node)
-
+        
         
         
         

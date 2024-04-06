@@ -24,17 +24,20 @@ class HolePuncher(AbstractProtocol):
         self.heard_data[add2].append(add1)
         self.heard_data[add2] = self.heard_data[add2][-5:]
     
-    def process_datagram(self, addr: tuple[str, int], data: bytes):
-        
+    def datagram_received(self, addr:tuple[str,int],data:bytes):
         self.successful.add(addr)
         if self.outstanding.get(addr) != None:
             print("outstanding from them")
             loop = asyncio.get_event_loop()
             for msg in self.outstanding.get(addr)[1]:
-                trmp = bytearray(b'\x01')
-                trmp = trmp + msg
-                loop.create_task(self._lower_sendto(trmp,addr))
+                
+                loop.create_task(self._lower_sendto(msg,addr))
             del self.outstanding[addr]
+        if data[:8] == self.uniqueid:
+            return self.process_datagram(addr, data[8:])
+        else:
+            return self.callback(addr,data)
+    def process_datagram(self, addr: tuple[str, int], data: bytes):
         if len(data) < 2:
             return
         if data[0] == HolePuncher.REQUEST_RELAY:
@@ -49,7 +52,7 @@ class HolePuncher(AbstractProtocol):
             ip_their = data[5:5+l_their].decode(encoding="utf-8")
             p_their = int.from_bytes(data[5+l_their: 7+l_their], byteorder="big")
         
-            loop.create_task(self._lower_sendto(bytes(msg),(ip_their, p_their)))
+            loop.create_task(self.send_datagram(bytes(msg),(ip_their, p_their)))
             return
         elif data[0] == HolePuncher.INFORM_RELAY:
             
@@ -58,7 +61,7 @@ class HolePuncher(AbstractProtocol):
             p_their = int.from_bytes(data[5+l_their: 7+l_their], byteorder="big")
             loop = asyncio.get_event_loop()
             print("informed of relay to ",p_their)
-            loop.create_task(self._lower_sendto(b'\x01',(ip_their, p_their)))
+            loop.create_task(self.send_datagram(b'\x01',(ip_their, p_their)))
             return
         return super().process_datagram(addr, data[1:])
     def timeout(self, addr):
@@ -75,7 +78,7 @@ class HolePuncher(AbstractProtocol):
         msg += addr[1].to_bytes(2, byteorder="big")
                 
         loop = asyncio.get_event_loop()
-        loop.create_task(self._lower_sendto(msg,self.heard_data[addr][-1]))
+        loop.create_task(self.send_datagram(msg,self.heard_data[addr][-1]))
         loop.call_later(10,
                                       self.timeout, addr)
     async def sendto(self, msg, addr):
@@ -91,16 +94,15 @@ class HolePuncher(AbstractProtocol):
                 msg += len(baddrs).to_bytes(4, byteorder="big")
                 msg += baddrs
                 msg += addr[1].to_bytes(2, byteorder="big")
-                await self._lower_sendto(b'\x01',addr)
+                await self.send_datagram(b'\x01',addr)
                 for add in self.heard_data.get(addr):
-                    await self._lower_sendto(bytes(msg),add)
+                    await self.send_datagram(bytes(msg),add)
             else:
                 # print(self.outstanding[addr])
                 # self.outstanding[addr] = (self.outstanding[addr][0], self.outstanding[addr][1])
                 self.outstanding[addr][1].append(msg)
         else:
-            trmp = bytearray(b'\x01')
-            trmp = trmp + msg
-            await self._lower_sendto(trmp,addr)
+            
+            await self._lower_sendto(msg,addr)
 
         

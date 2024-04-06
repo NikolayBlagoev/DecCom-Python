@@ -34,7 +34,7 @@ class GossipDiscovery(AbstractPeerDiscovery):
         for p in self.bootstrap_peers:
             await self.introduce_to_peer(p)
             msg = bytearray([GossipDiscovery.ASK_FOR_ID])
-            await self._lower_sendto(msg,p.addr)
+            await self.send_datagram(msg,p.addr)
         self.push_or_pull()
 
     def push_or_pull(self):
@@ -58,7 +58,7 @@ class GossipDiscovery(AbstractPeerDiscovery):
                 await self.introduce_to_peer(p)
                 msg = bytearray([GossipDiscovery.ASK_FOR_ID])
                 loop = asyncio.get_running_loop()
-                loop.create_task(self._lower_sendto(msg,p.addr))
+                loop.create_task(self.send_datagram(msg,p.addr))
                 
         if rand == 0 and len(ids) >= 2:
 
@@ -69,17 +69,17 @@ class GossipDiscovery(AbstractPeerDiscovery):
                 p2 = ids[randint(0, len(ids)-1)]
             msg = bytearray([GossipDiscovery.PUSH])
             msg = msg + bytes(self.peers[p2])
-            await self._lower_sendto(msg, self.peers[p1].addr)
+            await self.send_datagram(msg, self.peers[p1].addr)
 
             msg = bytearray([GossipDiscovery.PUSH])
             msg = msg + bytes(self.peers[p1])
-            await self._lower_sendto(msg, self.peers[p2].addr)
+            await self.send_datagram(msg, self.peers[p2].addr)
         elif len(ids) >= 1:
 
             p1 = ids[randint(0, len(ids)-1)]
             msg = bytearray([GossipDiscovery.PULL])
             msg = msg + bytes(self.peer)
-            await self._lower_sendto(msg, self.peers[p1].addr)
+            await self.send_datagram(msg, self.peers[p1].addr)
         loop = asyncio.get_running_loop()
         self.refresh_loop = loop.call_later(self.interval+2, self.push_or_pull)
     def remove_peer(self, addr: tuple[str, int], node_id: bytes):
@@ -91,12 +91,7 @@ class GossipDiscovery(AbstractPeerDiscovery):
         # print("introducing to", peer.id_node)
         msg = bytearray([GossipDiscovery.INTRODUCTION])
         msg = msg + bytes(self.peer)
-        await self._lower_sendto(msg, peer.addr)
-
-    async def sendto(self, msg, addr):
-        tmp = bytearray([1])
-        tmp = tmp + msg
-        return await self._lower_sendto(tmp, addr)
+        await self.send_datagram(msg, peer.addr)
 
     def process_datagram(self, addr: tuple[str, int], data: bytes):
         print("processing?")
@@ -124,7 +119,7 @@ class GossipDiscovery(AbstractPeerDiscovery):
                 msg = bytearray([GossipDiscovery.PULLED])
                 msg = msg + bytes(self.peers[ids[rand_node]])
                 loop = asyncio.get_running_loop()
-                loop.create_task(self._lower_sendto(msg, addr))
+                loop.create_task(self.send_datagram(msg, addr))
             
             self.connection_approval(addr,other,self.add_peer,self.ban_peer)
         elif data[0] == GossipDiscovery.PULLED:
@@ -165,19 +160,19 @@ class GossipDiscovery(AbstractPeerDiscovery):
                     if self.get_peers().get(p) is None:
                         continue
                     loop = asyncio.get_running_loop()
-                    loop.create_task(self._lower_sendto(
+                    loop.create_task(self.send_datagram(
                         data, self.peers[p].addr))
 
             else:
                 peer = self.peers.get(id)
                 loop = asyncio.get_running_loop()
-                loop.create_task(self._lower_sendto(data, peer.addr))
+                loop.create_task(self.send_datagram(data, peer.addr))
         elif data[0] == GossipDiscovery.ASK_FOR_ID:
             print("ASKING FOR ID")
             msg = bytearray([GossipDiscovery.INTRODUCTION])
             msg = msg + bytes(self.peer)
             loop = asyncio.get_running_loop()
-            loop.create_task(self._lower_sendto(msg, addr))
+            loop.create_task(self.send_datagram(msg, addr))
             
         else:
             self.callback(addr, data[1:])
@@ -206,7 +201,7 @@ class GossipDiscovery(AbstractPeerDiscovery):
         for p in l:
             if self.get_peers().get(p) is None:
                 continue
-            await self._lower_sendto(msg, self.peers[p].addr)
+            await self.send_datagram(msg, self.peers[p].addr)
 
         return
 

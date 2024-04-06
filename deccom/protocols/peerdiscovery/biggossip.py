@@ -35,7 +35,7 @@ class BigGossip(AbstractPeerDiscovery):
         for p in self.bootstrap_peers:
             await self.introduce_to_peer(p)
             msg = bytearray([BigGossip.ASK_FOR_ID])
-            await self._lower_sendto(msg,p.addr)
+            await self.send_datagram(msg,p.addr)
         loop = asyncio.get_event_loop()
         loop.call_later(2, self.refresh_table)
     
@@ -54,7 +54,7 @@ class BigGossip(AbstractPeerDiscovery):
                 await self.introduce_to_peer(p)
                 await asyncio.sleep(1)
                 msg = bytearray([BigGossip.ASK_FOR_ID])
-                await self._lower_sendto(msg,p.addr)
+                await self.send_datagram(msg,p.addr)
             self.refresh_loop = loop.call_later(2, self.refresh_table)
             return
         
@@ -64,7 +64,7 @@ class BigGossip(AbstractPeerDiscovery):
             prs = random.sample(prs,min(len(prs),2))
             for k,v in prs:
                 msg = bytearray([BigGossip.PULL])
-                await self._lower_sendto(msg,v.addr)
+                await self.send_datagram(msg,v.addr)
         self.refresh_loop = loop.call_later(self.interval, self.refresh_table)
     
     def remove_peer(self, addr: tuple[str, int], node_id: bytes):
@@ -77,12 +77,8 @@ class BigGossip(AbstractPeerDiscovery):
         # print("introducing to", peer.id_node)
         msg = bytearray([BigGossip.INTRODUCTION])
         msg = msg + bytes(self.peer)
-        await self._lower_sendto(msg, peer.addr)
+        await self.send_datagram(msg, peer.addr)
 
-    async def sendto(self, msg, addr):
-        tmp = bytearray([1])
-        tmp = tmp + msg
-        return await self._lower_sendto(tmp, addr)
       
     def process_datagram(self, addr: tuple[str, int], data: bytes):
         # print("processing...")
@@ -106,7 +102,7 @@ class BigGossip(AbstractPeerDiscovery):
                     for k,v in prs[i:i+10]:
                         msg += bytes(v)
                     loop = asyncio.get_event_loop()
-                    loop.create_task(self._lower_sendto(msg, addr))
+                    loop.create_task(self.send_datagram(msg, addr))
                     i += 10
 
         elif data[0] == BigGossip.PULLED:
@@ -122,7 +118,7 @@ class BigGossip(AbstractPeerDiscovery):
                     loop.create_task(self.introduce_to_peer(other))
                     
                     msg = bytearray([BigGossip.ASK_FOR_ID])
-                    loop.create_task(self._lower_sendto(msg, other.addr))
+                    loop.create_task(self.send_datagram(msg, other.addr))
                     
         
         elif data[0] == BigGossip.FIND:
@@ -148,13 +144,13 @@ class BigGossip(AbstractPeerDiscovery):
                     if self.get_peers().get(p) is None:
                         continue
                     loop = asyncio.get_running_loop()
-                    loop.create_task(self._lower_sendto(
+                    loop.create_task(self.send_datagram(
                         data, self.peers[p].addr))
 
             else:
                 peer = self.peers.get(id)
                 loop = asyncio.get_running_loop()
-                loop.create_task(self._lower_sendto(data, peer.addr))    
+                loop.create_task(self.send_datagram(data, peer.addr))    
         elif data[0] == BigGossip.ASK_FOR_ID:
             # print("ASKING FOR ID")
             msg = bytearray([BigGossip.INTRODUCTION])
@@ -164,7 +160,7 @@ class BigGossip(AbstractPeerDiscovery):
 
             msg = msg + bytes(self.peer)
             loop = asyncio.get_running_loop()
-            loop.create_task(self._lower_sendto(msg, addr))
+            loop.create_task(self.send_datagram(msg, addr))
             
         else:
             return self.callback(addr, data[1:])
@@ -193,7 +189,7 @@ class BigGossip(AbstractPeerDiscovery):
         for p in l:
             if self.get_peers().get(p) is None:
                 continue
-            await self._lower_sendto(msg, self.peers[p].addr)
+            await self.send_datagram(msg, self.peers[p].addr)
 
         return
 

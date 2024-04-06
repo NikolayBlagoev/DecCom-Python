@@ -63,7 +63,7 @@ class Noise(AbstractProtocol):
             msg += bytes(self.peer)
             msg += sign(self.peer.key, SHA256(shared))
             loop = asyncio.get_running_loop()
-            loop.create_task(self._lower_sendto(msg,addr))
+            loop.create_task(self.send_datagram(msg,addr))
             if self.awaiting_approval.get((addr,other.id_node)) != None:
                 success = self.awaiting_approval[(addr,other.id_node)][3]
                 peer = self.awaiting_approval[(addr,other.id_node)][1]
@@ -142,7 +142,12 @@ class Noise(AbstractProtocol):
                     return
                 return self.callback(addr, decrypted)
 
-
+    def datagram_received(self, addr: tuple[str, int], data: bytes):
+        if data[:8] == self.uniqueid:
+            return self.process_datagram(addr, data[8:])
+        elif not self.strict:
+            return self.callback(addr,data)
+        
     def send_challenge(self, addr, peer: Peer, success, failure):
         print("SENDING CHALLLENGE")
         loop = asyncio.get_running_loop()
@@ -152,7 +157,7 @@ class Noise(AbstractProtocol):
         # print(len(sign(self.peer.key, SHA256(shared))))
         msg += sign(self.peer.key, SHA256(shared))
         self.awaiting_approval[(addr,peer.id_node)] = (shared,peer,addr,success,failure)
-        loop.create_task(self._lower_sendto(msg,addr))
+        loop.create_task(self.send_datagram(msg,addr))
         
     async def broadcast(self, msg):
         for k,v in self.keys.items():
@@ -165,7 +170,7 @@ class Noise(AbstractProtocol):
             # print("sending to plaintex")
             tmp += prepend.to_bytes(1, byteorder="big")
             tmp += msg
-            return await self._lower_sendto(tmp, addr)
+            return await self.send_datagram(tmp, addr)
         elif self.encryption_mode == "chacha":
             if self.keys.get(addr) == None:
                 raise Exception("NO AUTHENTICATED CONNECTION")
@@ -176,14 +181,14 @@ class Noise(AbstractProtocol):
             signature = sign(self.peer.key, SHA256(msg))
             tmp += nonce + signature
             tmp += aed.encrypt(nonce,msg,signature)
-            return await self._lower_sendto(tmp, addr)
+            return await self.send_datagram(tmp, addr)
 
         elif self.encryption_mode == "sign_only":
             prepend = prepend ^ b'01000000'
             tmp += prepend.to_bytes(1, byteorder="big")
             tmp+= sign(self.peer.key,SHA256(msg))
             tmp += msg
-            return await self._lower_sendto(tmp, addr)
+            return await self.send_datagram(tmp, addr)
             
     @bindfrom("connection_approval")        
     def approve_peer(self, addr, peer: Peer, success, failure):

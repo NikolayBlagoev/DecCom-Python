@@ -9,7 +9,6 @@ from deccom.protocols.peerdiscovery.abstractpeerdiscovery import AbstractPeerDis
 
 
 class FixedPeers(AbstractPeerDiscovery):
-    EMPTY = int.from_bytes(b'\x00', byteorder="big")
     EXIT = int.from_bytes(b'\x02', byteorder="big")
     offers = dict(AbstractPeerDiscovery.offers, **{
         "sendto_id": "sendto_id",
@@ -40,7 +39,7 @@ class FixedPeers(AbstractPeerDiscovery):
     async def introduction(self, addr):
         msg = bytearray([1])
         # print("introducing to ",addr)
-        await self._lower_sendto(msg, addr)
+        await self.send_datagram(msg, addr)
     def process_datagram(self, addr: tuple[str, int], data: bytes):
         
         if self.a_to_p.get(addr) == None:
@@ -53,9 +52,7 @@ class FixedPeers(AbstractPeerDiscovery):
                 self.peer_crawls.get(self.a_to_p.get(addr)).set_result(True)
             else:
                 self.connected_callback(self.a_to_p[addr])
-        if data[0] == FixedPeers.EMPTY:
-            super().process_datagram(addr, data[1:])
-        elif data[0] == FixedPeers.EXIT:
+        if data[0] == FixedPeers.EXIT:
             
             p = self.a_to_p[addr]
             print("\n\n\n\nsomeone is gone?", p.pub_key)
@@ -66,11 +63,8 @@ class FixedPeers(AbstractPeerDiscovery):
             print("dont know this peer?")
 
             return
-        if msg[0] == int.from_bytes(b'\xc4', byteorder="big"):
-            print("sending push back!")
-        tmp = bytearray([FixedPeers.EMPTY])
-        tmp += msg
-        await super().sendto(tmp, addr)
+        
+        await super().sendto(msg, addr)
     async def stop_receiving(self):
         self.a_to_p = dict()
     async def sendto_id(self, msg, p: bytes):

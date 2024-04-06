@@ -24,7 +24,7 @@ class TCPHolePuncher(StreamProtocol):
         for p in self.known_peers:
             
             msg = bytearray([TCPHolePuncher.REQUEST_TCP])
-            await self._lower_sendto(msg,p.addr)
+            await self.send_datagram(msg,p.addr)
     def get_addr(self, writer):
         for addr in self.addresses_known:
             writer.write_ip(addr[0])
@@ -39,7 +39,7 @@ class TCPHolePuncher(StreamProtocol):
             writer.write_raw(self.peer.id_node)
             self.get_addr(writer)
             loop = asyncio.get_event_loop()
-            return loop.create_task(self._lower_sendto(writer.bytes(),addr))
+            return loop.create_task(self.send_datagram(writer.bytes(),addr))
         elif data[0] == TCPHolePuncher.ANSWER_TCP:
             reader = byte_reader(data[1:])
             node_id = reader.read_next(32)
@@ -64,7 +64,7 @@ class TCPHolePuncher(StreamProtocol):
             self.get_addr(writer)
             loop = asyncio.get_event_loop()
             print("will send them my addr")
-            return loop.create_task(self._lower_sendto(writer.bytes(),addr))
+            return loop.create_task(self.send_datagram(writer.bytes(),addr))
         elif data[0] == TCPHolePuncher.ANSWER_CONNECTION:
             print("answer to my connection")
             reader = byte_reader(data[1:])
@@ -137,8 +137,7 @@ class TCPHolePuncher(StreamProtocol):
     @bindto("open_connection")
     async def _lower_open_connection(self, remote_ip, remote_port, node_id: bytes):
         return
-    async def sendto(self, msg, addr):
-        await super().sendto(b'\x01' + msg, addr)
+
     async def open_connection(self, remote_ip, remote_port, node_id: bytes, keep_after: bool = False):
         if self._lower_has_connection(node_id):
             print("does have connection")
@@ -155,7 +154,7 @@ class TCPHolePuncher(StreamProtocol):
                 writer = byte_writer(header=TCPHolePuncher.REQUEST_CONNECTION)
                 writer.write_raw(self.peer.id_node)
                 self.get_addr(writer)
-                loop.create_task(self._lower_sendto(writer.bytes(), ret.addr))
+                loop.create_task(self.send_datagram(writer.bytes(), ret.addr))
                 self.futures[node_id] = fut
                 return await fut
     @bindto("send_stream")
@@ -187,7 +186,7 @@ class TCPHolePuncher(StreamProtocol):
                 writer = byte_writer(header=TCPHolePuncher.REQUEST_CONNECTION)
                 writer.write_raw(self.peer.id_node)
                 self.get_addr(writer)
-                loop.create_task(self._lower_sendto(writer.bytes(), ret.addr))
+                loop.create_task(self.send_datagram(writer.bytes(), ret.addr))
                 ret = await fut
             if not ret:
                 return

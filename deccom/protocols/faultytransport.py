@@ -3,17 +3,18 @@ import traceback
 from typing import Any, Callable
 import os
 from deccom.cryptofuncs.hash import SHA256
-
+from random import uniform
 from deccom.peers.peer import Peer
 from deccom.utils.common import get_executor
 
-class DefaultProtocol(asyncio.DatagramProtocol):
+class FaultyProtocol(asyncio.DatagramProtocol):
     PING_b = b'\xd4'
     PONG_b = b'\xd5'
     PING = int.from_bytes(PING_b, byteorder="big")
     PONG = int.from_bytes(PONG_b, byteorder="big")
-    def __init__(self, callback: Callable[[tuple[str,int], bytes], None] = lambda addr, data: ...):
+    def __init__(self, failure_p =0.01, callback: Callable[[tuple[str,int], bytes], None] = lambda addr, data: ...):
         self.transport = None
+        self.failure_p = failure_p
         self.callback = callback
         self.pings = dict()
         self._taken = dict()
@@ -41,9 +42,9 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         if len(data) < 2:
             print("invalid msg received")
             return
-        if data[0] == DefaultProtocol.PING:
+        if data[0] == FaultyProtocol.PING:
             loop.create_task(self.handle_ping(addr, data[1:]))
-        elif data[0] == DefaultProtocol.PONG:
+        elif data[0] == FaultyProtocol.PONG:
             loop.create_task(self.handle_pong(addr,data[1:]))
     def datagram_received(self, data, addr):
         
@@ -84,14 +85,14 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         timeout = loop.call_later(dt+2,
                                       self.timeout, addr,error,msg_id)
         self.pings[msg_id] = (success, timeout)
-        trmp = bytearray([DefaultProtocol.PING])
+        trmp = bytearray([FaultyProtocol.PING])
         trmp = trmp + bts
         self.send_datagram(trmp, addr=addr)
         
         return
 
     async def handle_ping(self, addr, data):
-        trmp = bytearray([DefaultProtocol.PONG])
+        trmp = bytearray([FaultyProtocol.PONG])
         trmp = trmp + data
         self.send_datagram(trmp, addr=addr)
         # print("sent pong",addr)
@@ -115,5 +116,7 @@ class DefaultProtocol(asyncio.DatagramProtocol):
     
     async def sendto(self,msg,addr):
         # print("sending to",addr,msg)
+        if uniform(0,1) < self.failure_p:
+            return
         self.transport.sendto(msg, addr)
         # print("sent")
