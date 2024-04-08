@@ -3,11 +3,12 @@ from typing import Any, Callable
 import os
 
 class TransportStub():
-    def __init__(self, addr) -> None:
+    def __init__(self, addr, connections) -> None:
         self.addr = addr
+        self.connections = connections
         return
     def sendto(self, data, addr):
-        sending = NetworkStub.connections.get(addr)
+        sending = self.connections.get(addr)
         if sending == None:
             return
         
@@ -17,9 +18,10 @@ class NetworkStub():
     PONG_b = b'\xd5'
     PING = int.from_bytes(PING_b, byteorder="big")
     PONG = int.from_bytes(PONG_b, byteorder="big")
-    connections = {}
-    def __init__(self, callback: Callable[[tuple[str,int], bytes], None] = lambda addr, data: ...):
+    
+    def __init__(self, connections, callback: Callable[[tuple[str,int], bytes], None] = lambda addr, data: ...):
         self.transport = None
+        self.connections = connections
         self.callback = callback
         self.pings = dict()
         self._taken = dict()
@@ -28,8 +30,8 @@ class NetworkStub():
     def set_listen(self, state):
         self.listen = state
     def initialise(self,addr):
-        NetworkStub.connections[addr] = self.processor
-        self.transport = TransportStub(addr)
+        self.connections[addr] = self.processor
+        self.transport = TransportStub(addr, self.connections)
         self.addr = addr
     async def processor(self, data, addr):
         if not self.listen:

@@ -6,7 +6,7 @@ from deccom.protocols.peerdiscovery import *
 from deccom.protocols.defaultprotocol import DefaultProtocol
 from deccom.protocols.reliableudp import ReliableUDP
 from datetime import datetime
-protocol = FaultyProtocol(failure_p=0.01)
+protocol = FaultyProtocol(failure_p=0.05)
 gossip = KademliaDiscovery([],interval=10)
 gossip.set_lower(protocol)
 rudp = ReliableUDP()

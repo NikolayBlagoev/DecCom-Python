@@ -87,7 +87,7 @@ class test_protocol_kademlia_2(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.p1 = Peer(None, pub_key="0")
         self.loop = asyncio.new_event_loop()
-        NetworkStub.connections = {}
+        self.connections = {}
         pl = NetworkStub(self.connections)
         kl = KademliaDiscovery()
         kl.set_lower(pl)

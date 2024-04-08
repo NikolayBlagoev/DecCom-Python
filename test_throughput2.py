@@ -12,7 +12,7 @@ from datetime import datetime
 # t = datetime.now()
 # sleep(2)
 # print(datetime.now()-t)
-protocol = FaultyProtocol(failure_p=0.01)
+protocol = FaultyProtocol(failure_p=0.00)
 n = Peer(("127.0.0.1", 10015))
 gossip = KademliaDiscovery([n],interval=10)
 gossip.set_lower(protocol)

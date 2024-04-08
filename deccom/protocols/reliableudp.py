@@ -77,7 +77,7 @@ class Connection():
             msg = self.connection + ReliableUDP.ACK.to_bytes(1,byteorder="big") + self.gen_ack()
              
             loop.create_task(self.send_datagram(msg,self.addr))
-            self.refresh_loop: asyncio.TimerHandle = loop.call_later(1,self.resend_last_batch)
+            self.refresh_loop: asyncio.TimerHandle = loop.call_later(0.5,self.resend_last_batch)
             
         
         
@@ -202,7 +202,7 @@ class Connection():
                 k += 1
         # print(self.missing)
         loop = asyncio.get_event_loop()
-        self.refresh_loop: asyncio.TimerHandle = loop.call_later(1,self.resend_last_batch)
+        self.refresh_loop: asyncio.TimerHandle = loop.call_later(0.5,self.resend_last_batch)
     def gen_ack(self) -> bytes:
         
         # print("gen_ack",self.missing)
