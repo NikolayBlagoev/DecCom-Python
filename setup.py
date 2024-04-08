@@ -13,7 +13,7 @@ setup(
     author_email="nickyblagoev@gmail.com",
     license="MIT",
     url="https://github.com/NikolayBlagoev/DecCom-Python",
-    packages=["deccom"],
+    packages=find_packages(),
     install_requires=[
         'cryptography',
         'fe25519',
@@ -23,7 +23,6 @@ setup(
       "Intended Audience :: Developers",
       "License :: OSI Approved :: MIT License",
       "Operating System :: OS Independent",
-      "Programming Language :: Python",
       "Programming Language :: Python :: 3"
     ]
 )
