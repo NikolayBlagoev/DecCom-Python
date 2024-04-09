@@ -86,14 +86,14 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         self.pings[msg_id] = (success, timeout)
         trmp = bytearray([DefaultProtocol.PING])
         trmp = trmp + bts
-        self.send_datagram(trmp, addr=addr)
+        await self.send_datagram(trmp, addr=addr)
         
         return
 
     async def handle_ping(self, addr, data):
         trmp = bytearray([DefaultProtocol.PONG])
         trmp = trmp + data
-        self.send_datagram(trmp, addr=addr)
+        await self.send_datagram(trmp, addr=addr)
         # print("sent pong",addr)
         return
 

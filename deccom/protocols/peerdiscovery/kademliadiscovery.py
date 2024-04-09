@@ -21,18 +21,19 @@ class KademliaDiscovery(AbstractPeerDiscovery):
                     "_lower_ping": "send_ping"
                     })
     required_lower = AbstractPeerDiscovery.required_lower + ["send_ping"]
-    def __init__(self, bootstrap_peers: list[Peer] = [], interval: int = 60, k: int = 20, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = None, disconnected_callback=lambda *args:..., connected_callback: Callable[[Peer], None] =lambda *args:...):
+    def __init__(self, bootstrap_peers: list[Peer] = [], interval: int = 60, k: int = 20, always_split = False, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = None, disconnected_callback=lambda *args:..., connected_callback: Callable[[Peer], None] =lambda *args:...):
         super().__init__(bootstrap_peers, interval, submodule, callback, disconnected_callback, connected_callback)
         self.k = k
         self.peer_crawls = dict()
         self.sent_finds = dict()
         self.warmup = 0
         self.max_warmup = 30 * (k//10)
+        self.always_split = always_split
         self.searches: dict[bytes,bytes] = dict()
         self.finders: dict[bytes, Finder] = dict()
     async def start(self, p: Peer):
         await super().start(p)
-        self.bucket_manager = BucketManager(self.peer.id_node,self.k,self._add)
+        self.bucket_manager = BucketManager(self.peer.id_node,self.k,self._add,always_split = self.always_split)
         for p in self.bootstrap_peers:
             await self.introduce_to_peer(p)
             msg = bytearray([KademliaDiscovery.ASK_FOR_ID])

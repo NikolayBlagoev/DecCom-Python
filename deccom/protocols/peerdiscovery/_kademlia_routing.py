@@ -72,14 +72,14 @@ class KBucket(object):
     def get_peer(self, dist):
         
         return self.peers.get(dist)
-    def add_peer(self, dist, node):
+    def add_peer(self, dist, node, always_split = False):
         self.touch()
         if self.peers.get(dist) != None:
             del self.peers[dist]
             self.peers[dist] = node
             return 0
         if len(self.peers) >= self.k:
-            if self.originator:
+            if self.originator or (always_split and self.max_dist - self.min_dist > self.k):
                 self.toadd.append((dist,node))
                 return 1
                     
@@ -103,13 +103,14 @@ class KBucket(object):
         
 
 class BucketManager(object):
-    def __init__(self, id, k, success_call, max_l = 256) -> None:
+    def __init__(self, id, k, success_call, max_l = 256, always_split = False) -> None:
         if isinstance(id, bytearray):
             id = bytes(id)
         if isinstance(id, bytes):
             id = int.from_bytes(id, byteorder="big")
         self.id = id
         self.k = k
+        self.always_split = always_split
         self.success_call = success_call
         self.buckets = [KBucket(0, 2**max_l, k, originator=True, success_call=self.success_call)]
     def bytexor(self, b1,b2):
@@ -164,7 +165,7 @@ class BucketManager(object):
             return
         indx = self._get_index(dist)
         
-        ret = self.buckets[indx].add_peer(dist,node)
+        ret = self.buckets[indx].add_peer(dist,node,always_split=self.always_split)
         
         if ret == 0:
             

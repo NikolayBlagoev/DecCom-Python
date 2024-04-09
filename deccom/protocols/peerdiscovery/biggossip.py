@@ -139,7 +139,7 @@ class BigGossip(AbstractPeerDiscovery):
                 
                 self.connection_approval(addr,seeker,self.add_peer,self.ban_peer)
             elif self.peers.get(id) == None:
-                l = list(self.get_peers())[:10]
+                l = list(self.get_peers())
                 for p in l:
                     if self.get_peers().get(p) is None:
                         continue
@@ -176,7 +176,8 @@ class BigGossip(AbstractPeerDiscovery):
         # print(p)
         
         self.peers[p.id_node] = p
-
+        return super().add_peer(addr, p)
+    
     
     
 
