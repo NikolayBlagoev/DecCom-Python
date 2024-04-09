@@ -41,6 +41,7 @@ class Noise(AbstractProtocol):
         self.awaiting_approval: dict[tuple[tuple[str,int],bytes], tuple[int, Peer, tuple[str,int], Callable, Callable]] = dict()
         self.approved_connections: dict[tuple[tuple[str,int],bytes], Peer] = dict()
         self.keys: dict[tuple[str,int], tuple[ChaCha20Poly1305,Peer]] = dict()
+        self.message_buffer: dict[tuple[str,int],list[bytes]] = dict()
     def get_al(self, addr: tuple[str,int]):
         # print(self.keys)
         if self.keys.get(addr) == None:
@@ -143,11 +144,18 @@ class Noise(AbstractProtocol):
                 return self.callback(addr, decrypted)
 
     def datagram_received(self, addr: tuple[str, int], data: bytes):
+        if self.keys.get(addr) == None:
+            if self.message_buffer.get(addr) == None:
+                self.message_buffer[addr] = []
+            self.message_buffer[addr].append(data)
+            return
+            
         if data[:8] == self.uniqueid:
             return self.process_datagram(addr, data[8:])
         elif not self.strict:
             return self.callback(addr,data)
-        
+    async def _helper(self, addr, data):
+        self.datagram_received(addr,data)
     def send_challenge(self, addr, peer: Peer, success, failure):
         print("SENDING CHALLLENGE")
         loop = asyncio.get_running_loop()
@@ -189,14 +197,15 @@ class Noise(AbstractProtocol):
             tmp+= sign(self.peer.key,SHA256(msg))
             tmp += msg
             return await self.send_datagram(tmp, addr)
-            
+    
+
     @bindfrom("connection_approval")        
     def approve_peer(self, addr, peer: Peer, success, failure):
         if self.approved_connections.get((addr,peer.id_node)) != None and self.approved_connections.get((addr,peer.id_node)).id_node == peer.id_node  \
         and self.approved_connections.get((addr,peer.id_node)).addr[0] == peer.addr[0] \
         and self.approved_connections.get((addr,peer.id_node)).addr[1] == peer.addr[1]:
             return success(addr,peer)
-        
+        loop = asyncio.get_event_loop()
         if self.awaiting_approval.get((addr,peer)) != None:
             print("already waiting")
             return
@@ -206,8 +215,12 @@ class Noise(AbstractProtocol):
         
         if not self.strict:
             self.keys[addr] = (None, peer)
-            # print("approved")
-            return success(addr,peer)
+            success(addr,peer)
+            if self.message_buffer.get(addr) != None:
+                for msg in self.message_buffer[addr]:
+                    loop.create_task(self._helper(addr,msg))
+                del self.message_buffer[addr]
+            return 
         
         if addr[0] != peer.addr[0] or addr[1] != peer.addr[1]:
             print("wrong addy")
