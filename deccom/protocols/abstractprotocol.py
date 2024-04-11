@@ -18,8 +18,9 @@ class AbstractProtocol(object):
     bindings = dict({"_lower_start":  "start", "_lower_sendto":  "sendto", "datagram_received": "callback"})
     
    
-    def check_if_have(submodule, attr)->bool:
-        
+    def check_if_have(submodule, attr, name = None)->bool:
+        if name != None and submodule.__class__.__name__ != name:
+            return AbstractProtocol.check_if_have(submodule.submodule,attr,name)
         if not hasattr(submodule,attr):
             if hasattr(submodule,"offers"):
                 if isinstance(submodule.offers, dict):
@@ -30,7 +31,7 @@ class AbstractProtocol(object):
             if not hasattr(submodule,"submodule") or submodule.submodule == None:
                 return False
             else:
-                return AbstractProtocol.check_if_have(submodule.submodule,attr)
+                return AbstractProtocol.check_if_have(submodule.submodule,attr,name)
             
         else:
             if submodule._taken.get(attr) != None:
@@ -40,7 +41,9 @@ class AbstractProtocol(object):
         
         
         return True
-    def get_if_have(submodule: Any, attr)->bool:
+    def get_if_have(submodule: Any, attr, name = None)->bool:
+        if name != None and submodule.__class__.__name__ != name:
+            return AbstractProtocol.get_if_have(submodule.submodule,attr,name)
         if not hasattr(submodule,attr):
             if hasattr(submodule,"offers"):
                 if isinstance(submodule.offers, dict):
@@ -49,7 +52,7 @@ class AbstractProtocol(object):
             if not hasattr(submodule,"submodule") or submodule.submodule == None:
                 return None
             else:
-                return AbstractProtocol.get_if_have(submodule.submodule,attr)
+                return AbstractProtocol.get_if_have(submodule.submodule,attr,name)
         else:
             return getattr(submodule,attr)
         return None
@@ -63,8 +66,9 @@ class AbstractProtocol(object):
         await self._lower_sendto(self.uniqueid + msg, addr)
 
     
-    def set_if_have(submodule,attr,val):
-        
+    def set_if_have(submodule,attr,val,name = None):
+        if name != None and submodule.__class__.__name__ != name:
+            return AbstractProtocol.set_if_have(submodule.submodule,attr,val,name)
         if not hasattr(submodule,attr):
             if hasattr(submodule,"offers"):
                 if isinstance(submodule.offers, dict):
@@ -78,7 +82,7 @@ class AbstractProtocol(object):
             if not hasattr(submodule,"submodule") or submodule.submodule == None:
                 raise Exception("Cannot find any method to bind to",attr,"asked to be bound to",val)
             else:
-                AbstractProtocol.set_if_have(submodule.submodule,attr,val)
+                AbstractProtocol.set_if_have(submodule.submodule,attr,val,name)
                 return
         else:
             if submodule._taken.get(attr) != None:
