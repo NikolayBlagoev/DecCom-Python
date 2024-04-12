@@ -55,7 +55,16 @@ class StreamProtocol(AbstractProtocol):
         
         
         # self.lock = asyncio.Lock()
-        
+    async def stop(self):
+        for k,v in self.connections.items():
+            async with self.locks[k]:
+                v.writer.close()
+                if v.fut != None:
+                    v.fut.cancel()
+        self.connections.clear()
+        self.locks.clear()
+        self.await_connections.clear()
+        return await super().stop()
     
     async def handle_connection(self, reader: asyncio.StreamReader,writer: asyncio.StreamWriter, node_id: Any = None, addr: Any = None):
         #print("CONNECTION FROM PEER",  writer.get_extra_info('peername'))

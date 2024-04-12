@@ -41,4 +41,7 @@ class Finder(object):
                 pi = NodeaAbstraction(p.id_node,p,int.from_bytes(p.id_node, byteorder="big"))
                 heapq.heappush(self.peers, (pi.idint ^ self.look_for_int, pi))
 
-                
+    def stop(self):
+        self.contacted.clear()
+        self.peers.clear()
+                    

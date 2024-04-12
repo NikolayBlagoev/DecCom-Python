@@ -41,6 +41,13 @@ class AbstractProtocol(object):
         
         
         return True
+    @bindto("stop")
+    async def _lower_stop(self):
+        return
+    async def stop(self):
+        self.started = False
+
+        return await self._lower_stop()
     def get_if_have(submodule: Any, attr, name = None)->bool:
         if name != None and submodule.__class__.__name__ != name:
             return AbstractProtocol.get_if_have(submodule.submodule,attr,name)
@@ -62,7 +69,8 @@ class AbstractProtocol(object):
         return self.callback(addr,data)
     
     async def send_datagram(self, msg: bytes, addr: tuple[str,int]):
-
+        if not self.started:
+            return
         await self._lower_sendto(self.uniqueid + msg, addr)
 
     
@@ -103,6 +111,8 @@ class AbstractProtocol(object):
     
     @bindfrom("callback")    
     def datagram_received(self, addr:tuple[str,int],data:bytes):
+        if not self.started:
+            return
         if data[:8] == self.uniqueid:
             return self.process_datagram(addr, data[8:])
         else:

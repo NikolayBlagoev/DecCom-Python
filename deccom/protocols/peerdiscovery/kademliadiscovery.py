@@ -28,9 +28,11 @@ class KademliaDiscovery(AbstractPeerDiscovery):
         self.sent_finds = dict()
         self.warmup = 0
         self.max_warmup = 30 * (k//10)
+        self.refresh_loop = None
         self.always_split = always_split
         self.searches: dict[bytes,bytes] = dict()
         self.finders: dict[bytes, Finder] = dict()
+        self.bucket_manager = None
     async def start(self, p: Peer):
         await super().start(p)
         self.bucket_manager = BucketManager(self.peer.id_node,self.k,self._add,always_split = self.always_split)
@@ -39,8 +41,19 @@ class KademliaDiscovery(AbstractPeerDiscovery):
             msg = bytearray([KademliaDiscovery.ASK_FOR_ID])
             await self.send_datagram(msg,p.addr)
         loop = asyncio.get_event_loop()
-        loop.call_later(2, self.refresh_table)
-    
+        self.refresh_loop = loop.call_later(2, self.refresh_table)
+    async def stop(self):
+        self.searches.clear()
+        for k,v in self.finders.items():
+            v.stop()
+        self.finders.clear()
+        self.peer_crawls.clear()
+        self.sent_finds.clear()
+        if self.bucket_manager != None:
+            self.bucket_manager.clear()
+        if self.refresh_loop != None:
+            self.refresh_loop.cancel()
+        return await super().stop()
     def refresh_table(self):
         
         loop = asyncio.get_event_loop()

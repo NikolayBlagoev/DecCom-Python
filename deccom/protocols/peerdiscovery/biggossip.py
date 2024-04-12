@@ -26,6 +26,7 @@ class BigGossip(AbstractPeerDiscovery):
         self.peer_crawls = dict()
         self.sent_finds = dict()
         self.warmup = 0
+        self.refresh_loop = None
         self.max_warmup = 60
         self.searches: dict[bytes,bytes] = dict()
         
@@ -37,7 +38,7 @@ class BigGossip(AbstractPeerDiscovery):
             msg = bytearray([BigGossip.ASK_FOR_ID])
             await self.send_datagram(msg,p.addr)
         loop = asyncio.get_event_loop()
-        loop.call_later(2, self.refresh_table)
+        self.refresh_loop = loop.call_later(2, self.refresh_table)
     
     def refresh_table(self):
         
@@ -66,7 +67,15 @@ class BigGossip(AbstractPeerDiscovery):
                 msg = bytearray([BigGossip.PULL])
                 await self.send_datagram(msg,v.addr)
         self.refresh_loop = loop.call_later(self.interval, self.refresh_table)
-    
+        
+    async def stop(self):
+        if self.refresh_loop != None:
+            self.refresh_loop.cancel()
+            self.refresh_loop = None
+        self.searches.clear()
+        self.peer_crawls.clear()
+        self.sent_finds.clear()
+        return await super().stop()
     def remove_peer(self, addr: tuple[str, int], node_id: bytes):
         if  self.peers.get(node_id) == None:
             return

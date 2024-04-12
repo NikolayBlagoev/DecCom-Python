@@ -34,15 +34,14 @@ class AbstractPeerDiscovery(AbstractProtocol):
         self.peers: dict[bytes, Peer] = dict()
         
     
-    def set_connected_callback(self, callback: Callable[[Peer], None]):
-        self.connected_callback = callback
-
-    def set_disconnected_callback(self, callback):
-        self.disconnected_callback = callback
+    
     @bindfrom("connected_callback")
     def add_peer(self, addr: tuple[str,int], p: Peer):
         self.connected_callback(addr, p)
-    
+    async def stop(self):
+        self.peers.clear()
+        
+        return await super().stop()
     def ban_peer(self, addr: tuple[str,int], p: Peer):
         return
     @bindfrom("disconnected_callback")

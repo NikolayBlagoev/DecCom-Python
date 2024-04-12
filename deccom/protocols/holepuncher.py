@@ -16,14 +16,20 @@ class HolePuncher(AbstractProtocol):
         self.successful = set()
         self.outstanding: dict[tuple[str,int], tuple[int, list[bytes]]] = dict()
         
-    
+    async def stop(self):
+        self.outstanding.clear()
+        self.heard_data.clear()
+        for _,v in self.outstanding.items():
+            v[1].clear()
+        self.outstanding.clear()
+        return await super().stop()
     def heard_from(self,add1, add2):
         print("adding", add2,"from",add1)
         if self.heard_data.get(add2) == None:
             self.heard_data[add2] = []
         self.heard_data[add2].append(add1)
         self.heard_data[add2] = self.heard_data[add2][-5:]
-    
+
     def datagram_received(self, addr:tuple[str,int],data:bytes):
         self.successful.add(addr)
         if self.outstanding.get(addr) != None:

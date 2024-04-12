@@ -14,6 +14,7 @@ class DefaultProtocol(asyncio.DatagramProtocol):
     PONG = int.from_bytes(PONG_b, byteorder="big")
     def __init__(self, callback: Callable[[tuple[str,int], bytes], None] = lambda addr, data: ...):
         self.transport = None
+        self.started = False
         self.callback = callback
         self.pings = dict()
         self._taken = dict()
@@ -46,7 +47,8 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         elif data[0] == DefaultProtocol.PONG:
             loop.create_task(self.handle_pong(addr,data[1:]))
     def datagram_received(self, data, addr):
-        
+        if not self.started:
+            return
         # print("from:", addr, "data", data)
         
         if data[:8] == self.uniqueid:
@@ -64,9 +66,13 @@ class DefaultProtocol(asyncio.DatagramProtocol):
                 traceback.print_exc(file=log)
                 
        
+    async def stop(self):
+        self.started = False
 
+        return
     async def start(self, p: Peer, *args):
         self.p = p
+        self.started = True
         return
     def timeout(self, addr, error, msg_id):
         if self.pings.get(msg_id) is None:

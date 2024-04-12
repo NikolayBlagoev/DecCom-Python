@@ -68,6 +68,9 @@ class KBucket(object):
             dist,peer = self.toadd.pop()
             self.success_call(dist, peer)
             self.peers[dist] = peer
+    def clear(self):
+        self.peers.clear()
+        self.toadd.clear()
 
     def get_peer(self, dist):
         
@@ -149,7 +152,11 @@ class BucketManager(object):
         indx = self._get_index(dist)
         return self.buckets[indx].update_peer(dist, node)
    
-    
+    def clear(self):
+        for b in self.buckets:
+            b.clear()
+        self.buckets.clear()
+        
     def add_peer(self,id,node, lv=0):
         if self.get_peer(id) != None:
             return None

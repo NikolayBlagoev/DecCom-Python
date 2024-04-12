@@ -166,7 +166,15 @@ class Noise(AbstractProtocol):
         msg += sign(self.peer.key, SHA256(shared))
         self.awaiting_approval[(addr,peer.id_node)] = (shared,peer,addr,success,failure)
         loop.create_task(self.send_datagram(msg,addr))
+    async def stop(self):
         
+        for _,v in self.message_buffer.items():
+            v.clear()
+        self.message_buffer.clear()
+        self.keys.clear()
+        self.approved_connections.clear()
+        self.awaiting_approval.clear()
+        return await super().stop()   
     async def broadcast(self, msg):
         for k,v in self.keys.items():
             await self.sendto(msg, k)

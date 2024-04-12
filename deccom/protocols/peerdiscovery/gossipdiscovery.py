@@ -27,7 +27,7 @@ class GossipDiscovery(AbstractPeerDiscovery):
         super().__init__(bootstrap_peers, interval, submodule, callback, disconnected_callback, connected_callback)
         self.peer_crawls = dict()
         self.sent_finds = dict()
-        
+        self.refresh_loop = None
     
     async def start(self, p: Peer):
         await super().start(p)
@@ -86,7 +86,12 @@ class GossipDiscovery(AbstractPeerDiscovery):
         if self.peers.get(node_id) != None:
             del self.peers[node_id]
         return super().remove_peer(addr, node_id)
-    
+    async def stop(self):
+        if self.refresh_loop != None:
+            self.refresh_loop.cancel()
+        self.peer_crawls.clear()
+        self.sent_finds.clear()
+        return await super().stop()
     async def introduce_to_peer(self, peer: Peer):
         # print("introducing to", peer.id_node)
         msg = bytearray([GossipDiscovery.INTRODUCTION])

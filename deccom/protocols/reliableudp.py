@@ -26,7 +26,15 @@ class Connection():
         self.send_datagram = send_datagram
         self.complete = False
         self.desired = -1
+    def stop(self, clear_queue = True):
+        if self.refresh_loop != None:
+            self.refresh_loop.cancel()
+        if clear_queue and isinstance(self.data, asyncio.Queue):
+            while not self.data.empty():
+                self.data.get_nowait()
+        self.missing.clear()
 
+    
     def send(self, head: int):
         if head * self.max_size >= self.ln:
             self.done = True
@@ -254,7 +262,14 @@ class ReliableUDP(AbstractProtocol):
         self.receives: dict[tuple[tuple[str,int], bytes], Connection] = dict()
         self.sends: dict[tuple[tuple[str,int], bytes], Connection] = dict()
         self.connections = 0
-    
+    async def stop(self):
+        for _,v in self.receives.items():
+            v.stop()
+        self.receives.clear()
+        for _,v in self.sends.items():
+            v.stop()
+        self.sends.clear()
+        return await super().stop()
     def process_datagram(self, addr, data):
         
         connection = data[0:4]

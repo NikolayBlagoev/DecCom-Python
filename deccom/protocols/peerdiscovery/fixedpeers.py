@@ -36,6 +36,13 @@ class FixedPeers(AbstractPeerDiscovery):
         for a in self.a_to_p:
             # self.introduced.append(a)
             loop.create_task(self.introduction(a))
+    async def stop(self):
+        self.p_to_a.clear()
+        self.a_to_p.clear()
+        self.sent_finds.clear()
+        self.peer_crawls.clear()
+        self.introduced.clear()
+        return await super().stop()
     async def introduction(self, addr):
         msg = bytearray([1])
         # print("introducing to ",addr)

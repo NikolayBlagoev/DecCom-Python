@@ -25,6 +25,14 @@ class TCPHolePuncher(StreamProtocol):
             
             msg = bytearray([TCPHolePuncher.REQUEST_TCP])
             await self.send_datagram(msg,p.addr)
+
+    async def stop(self):
+        for _,v in self.futures.items():
+            v.cancel()
+        self.addresses_known.clear()
+        self.futures.clear()
+        self.known_tcp_pairs.clear()
+        return await super().stop()
     def get_addr(self, writer):
         for addr in self.addresses_known:
             writer.write_ip(addr[0])
