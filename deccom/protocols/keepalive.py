@@ -27,7 +27,7 @@ class KeepAlive(AbstractProtocol):
     def register_keep_alive(self, addr,node_id):
         self.keep_alives[node_id] = addr
 
-    def register_keep_alive(self, node_id):
+    def deregister_keep_alive(self, node_id):
         if self.keep_alives.get(node_id) != None:
             del self.keep_alives[node_id]
 
