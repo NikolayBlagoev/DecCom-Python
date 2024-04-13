@@ -30,14 +30,18 @@ class StreamNode(Node):
         
     async def listen(self):
         loop = asyncio.get_running_loop()
-        listen = loop.create_datagram_endpoint(self.protocol_type.get_lowest, local_addr=(self.ip_addr, self.port))
-        self.transport, self.protocol = await listen
+        self.udp = loop.create_datagram_endpoint(self.protocol_type.get_lowest, local_addr=(self.ip_addr, self.port))
+        
+        self.transport, self.protocol = await self.udp
         print(self.protocol_type.get_lowest_stream().handle_connection)
         self.server = await asyncio.start_server(
                 self.protocol_type.get_lowest_stream().handle_connection, sock=self.s)
         
         await self.protocol_type.start(self.peer)
-        
+    async def close(self):
+        self.udp.close()
+        self.transport.close()
+        self.server.close()
     async def stream_data(self, node_id, data):
         # print("sending stream")
         

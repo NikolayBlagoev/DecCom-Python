@@ -40,7 +40,7 @@ class StreamProtocol(AbstractProtocol):
                     "_lower_get_peer": "get_peer",
                     
                 })
-    required_lower = AbstractProtocol.required_lower + ["get_peer", "set_connected_callback", "set_disconnected_callback"]
+    required_lower = AbstractProtocol.required_lower + ["get_peer"]
     def __init__(self, always_connect: bool, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = lambda addr, data: print(addr, data),disconnected_callback = lambda addr,nodeid: print(nodeid, "disconnected"), 
                 connected_callback = lambda addr, peer: ..., stream_callback = lambda data, node_id, addr: ..., stream_close_callback = lambda node_id,addr: ...):
         super().__init__(submodule, callback)

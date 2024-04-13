@@ -45,6 +45,8 @@ class AbstractProtocol(object):
     async def _lower_stop(self):
         return
     async def stop(self):
+        if not self.started:
+            return
         self.started = False
 
         return await self._lower_stop()
