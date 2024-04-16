@@ -110,7 +110,7 @@ class KademliaDiscovery(AbstractPeerDiscovery):
     
     def remove_peer(self, addr: tuple[str, int], node_id: bytes):
         if  self.bucket_manager.get_peer(node_id) == None:
-            return
+            return super().remove_peer(addr, node_id)
         del self.peers[node_id]
         print(self.peer.pub_key, "removing peer.", self.bucket_manager.get_peer(node_id).pub_key)
         self.bucket_manager.remove_peer(node_id)

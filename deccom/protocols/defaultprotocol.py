@@ -35,14 +35,17 @@ class DefaultProtocol(asyncio.DatagramProtocol):
     async def send_datagram(self, msg: bytes, addr: tuple[str,int]):
 
         await self.sendto(self.uniqueid + msg, addr)
+        
 
     
-    def process_datagram(self, data, addr):
+    def process_datagram(self, addr, data):
         loop = asyncio.get_event_loop()
+        
         if len(data) < 2:
             print("invalid msg received")
             return
         if data[0] == DefaultProtocol.PING:
+            
             loop.create_task(self.handle_ping(addr, data[1:]))
         elif data[0] == DefaultProtocol.PONG:
             loop.create_task(self.handle_pong(addr,data[1:]))
@@ -86,7 +89,7 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         while self.pings.get(msg_id) != None:
             bts = os.urandom(4)
             msg_id = int.from_bytes(bts, "big")
-        # print("sending ping",addr)
+        
         timeout = loop.call_later(dt+2,
                                       self.timeout, addr,error,msg_id)
         self.pings[msg_id] = (success, timeout)
@@ -99,13 +102,14 @@ class DefaultProtocol(asyncio.DatagramProtocol):
     async def handle_ping(self, addr, data):
         trmp = bytearray([DefaultProtocol.PONG])
         trmp = trmp + data
+        
         await self.send_datagram(trmp, addr=addr)
-        # print("sent pong",addr)
+        
         return
 
     async def handle_pong(self, addr, data):
         msg_id = int.from_bytes(data, "big")
-        # print("received pong",addr )
+        
         if self.pings.get(msg_id) is None:
             return
         success, timeout = self.pings[msg_id]

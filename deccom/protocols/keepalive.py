@@ -34,6 +34,7 @@ class KeepAlive(AbstractProtocol):
     def remove_peer(self, addr: tuple[str, int], node_id: bytes):
         if not self.started:
             return
+        print("PEER TIMED OUTs")
         if self.keep_alives.get(node_id) != None:
             del self.keep_alives[node_id]
         self.disconnected_callback(addr,node_id)
