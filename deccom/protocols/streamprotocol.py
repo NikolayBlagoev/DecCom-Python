@@ -295,7 +295,6 @@ class StreamProtocol(AbstractProtocol):
             with open(f"log{self.peer.pub_key}.txt", "a") as log:
                 log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
                 log.write(f" cannot send to {self.get_peer(node_id).pub_key} {len(data)}\n")
-            self.remove_from_dict(node_id)
             await asyncio.sleep(3)
             p: Peer = self.get_peer(node_id)
             if p == None:

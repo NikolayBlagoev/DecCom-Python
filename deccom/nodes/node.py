@@ -22,8 +22,8 @@ class Node(object):
 
     async def listen(self):
         loop = asyncio.get_running_loop()
-        listen = loop.create_datagram_endpoint(self.protocol_type.get_lowest, local_addr=(self.ip_addr, self.port))
-        self.transport, self.protocol = await listen
+        self.udp = loop.create_datagram_endpoint(self.protocol_type.get_lowest, local_addr=(self.ip_addr, self.port))
+        self.transport, self.protocol = await self.udp
         await self.protocol_type.start(self.peer)
     async def sendto(self, msg, addr): 
         await self.protocol_type.sendto(msg, addr=addr)
