@@ -7,6 +7,7 @@ from deccom.peers.peer import Peer
 from deccom.protocols.abstractprotocol import AbstractProtocol
 from deccom.protocols.wrappers import *
 import socket
+import traceback
 class DictItem:
     def __init__(self,reader: asyncio.StreamReader,writer: asyncio.StreamWriter,fut: asyncio.Future, opened_by_me: int) -> None:
         self.reader = reader
@@ -226,7 +227,7 @@ class StreamProtocol(AbstractProtocol):
             log.write(f"listening for data {node_id} \n")
             
         try:
-            data = await reader.read(32)
+            data = await reader.readexactly(32)
         except (ConnectionResetError, BrokenPipeError) as e:
             with open(f"log{self.peer.pub_key}.txt", "a") as log:
                 log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
@@ -312,7 +313,10 @@ class StreamProtocol(AbstractProtocol):
         self.stream_close_callback = callback    
     async def _caller(self,data,node_id,addr):
         print("received data... ", len(data))
-        self.stream_callback(data,node_id,addr)
+        try:
+            self.stream_callback(data,node_id,addr)
+        except Exception:
+                traceback.print_exc(file=log)
     @bindfrom("stream_callback")
     def process_data(self,data,node_id,addr):
         

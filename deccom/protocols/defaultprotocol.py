@@ -89,7 +89,8 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         while self.pings.get(msg_id) != None:
             bts = os.urandom(4)
             msg_id = int.from_bytes(bts, "big")
-        
+        # with open(f"log{self.p.pub_key}.txt","a") as log:
+        #     log.write(f"SENDING PING TO {addr} {bts}\n")
         timeout = loop.call_later(dt+2,
                                       self.timeout, addr,error,msg_id)
         self.pings[msg_id] = (success, timeout)
@@ -102,14 +103,16 @@ class DefaultProtocol(asyncio.DatagramProtocol):
     async def handle_ping(self, addr, data):
         trmp = bytearray([DefaultProtocol.PONG])
         trmp = trmp + data
-        
+        # with open(f"log{self.p.pub_key}.txt","a") as log:
+        #     log.write(f"RESPONDING PING TO {addr} {data}\n")
         await self.send_datagram(trmp, addr=addr)
         
         return
 
     async def handle_pong(self, addr, data):
         msg_id = int.from_bytes(data, "big")
-        
+        # with open(f"log{self.p.pub_key}.txt","a") as log:
+        #     log.write(f"rECEIVED PONG FROM {addr} {data}\n")
         if self.pings.get(msg_id) is None:
             return
         success, timeout = self.pings[msg_id]
