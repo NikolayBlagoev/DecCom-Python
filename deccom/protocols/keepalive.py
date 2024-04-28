@@ -9,7 +9,7 @@ class _KA:
     attempts: int = 3
 
 class KeepAlive(AbstractProtocol):
-    def __init__(self, interval = 20, timeout = 10, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = lambda addr,msg: ...):
+    def __init__(self, interval = 20, timeout = 5, submodule=None, callback: Callable[[tuple[str, int], bytes], None] = lambda addr,msg: ...):
         assert timeout < interval
         self.keep_alives: dict[bytes,_KA] = dict()
         self.disconnected_callback = lambda *args: ...
@@ -47,10 +47,11 @@ class KeepAlive(AbstractProtocol):
         if self.keep_alives.get(node_id) == None:
             return
         self.keep_alives[node_id].attempts -= 1
-
+        if self.keep_alives[node_id].attempts == 1:
+            return asyncio.get_event_loop().create_task(self.send_ping(addr,lambda addr, id_node = node_id, self = self: self.resp(addr,id_node), lambda addr, id_node=node_id, self=self: self.remove_peer(addr, id_node),self.timeout))
         if self.keep_alives[node_id].attempts <= 0:
-            if self.a_to_n.get(self.keep_alives[node_id].addr) != None:
-                del self.a_to_n[self.keep_alives[node_id].addr]
+            if self.a_to_n.get(addr) != None:
+                del self.a_to_n[addr]
             del self.keep_alives[node_id]
             self.disconnected_callback(addr,node_id)
     def resp(self,addr,id_node):
@@ -72,7 +73,9 @@ class KeepAlive(AbstractProtocol):
     def check_each(self):
         loop = asyncio.get_event_loop()
         for k,v in self.keep_alives.items():
-            
+            if v.attempts <= 1:
+                continue
+            v.attempts = 2
             loop.create_task(self.send_ping(v.addr,lambda addr, id_node = k, self = self: self.resp(addr,id_node), lambda addr, id_node=k, self=self: self.remove_peer(addr, id_node),self.timeout))
 
         self.refresh_loop = loop.call_later(self.interval, self.check_each)
