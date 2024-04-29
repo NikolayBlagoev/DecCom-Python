@@ -14,15 +14,16 @@ class DelayProtocol(AbstractProtocol):
 
     
         #self.stream_callback(data,node_id,addr)
-    async def send_stream(self,node_id,data):
+    async def send_stream(self,node_id,data, ignore_sz = 0):
         print("delay...")
         p = self.get_peer(node_id)
         print(p)
         loop = asyncio.get_event_loop()
         dl = self.delay_map(p.pub_key, self.peer.pub_key)
+        sz = len(data) - ignore_sz
         print(dl)
-        print("will send in ",dl[0]/1000 + len(data)/(1024**3*dl[1]))
-        await asyncio.sleep(dl[0]/1000 + len(data)/(1024**3*dl[1]))
+        print("will send in ",dl[0]/1000 + sz/(1024**3*dl[1]))
+        await asyncio.sleep(dl[0]/1000 + sz/(1024**3*dl[1]))
         if self.started:
             return await self._lower_send_to(node_id,data)
     @bindto("send_stream")
