@@ -3,6 +3,12 @@ from collections import OrderedDict
 from deccom.peers.peer import Peer
 import time
 class KBucket(object):
+
+    """
+    KBuckets as described by the Kademlia Paper. Each bucket has range of [min_dist,max_dist) and stores nodes at that distance from the 
+    own id node.
+    """
+
     def __init__(self, min_dist, max_dist, k, originator = False, success_call = lambda addr, p : ...):
         self.min_dist = min_dist
         self.max_dist = max_dist
@@ -13,8 +19,25 @@ class KBucket(object):
         self.originator = originator
         self.toadd: list[tuple[bytes,Peer]] = []
         self.updated = time.monotonic()
+    
+    """
+    Updates modification date of this bucket (same as UNIX touch command)
+    """
+
     def touch(self):
         self.updated = time.monotonic()
+    
+
+    """
+    Splits the bucket in two
+
+    Returns
+    ----------
+    (left,right)
+        A tuple of the new left and right bucket
+
+    """
+
     def split_bucket(self):
         to_split = self.mid_point
         left = KBucket(self.min_dist, to_split, self.k, success_call = self.success_call)
@@ -216,13 +239,7 @@ class BucketManager(object):
         lst: list[Peer] = []
         lst += list(self.buckets[idx].peers.values())
         diff = 1
-        
         stopper = max(idx, len(self.buckets)-idx)
-        # print("stopper", idx, len(self.buckets), stopper, len(lst), alpha)
-        # acc = 0
-        # for b in self.buckets:
-        #     acc += len(b.peers)
-        # print("we know",acc)
 
         while len(lst) < alpha:
             

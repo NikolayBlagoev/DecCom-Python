@@ -1,7 +1,8 @@
 import asyncio
+from os import urandom
 from datetime import datetime
 from deccom.utils.common import ternary_comparison
-from asyncio import exceptions
+from asyncio import exceptions, IncompleteReadError
 from typing import Any, Callable, List, Union
 from deccom.peers.peer import Peer
 from deccom.protocols.abstractprotocol import AbstractProtocol
@@ -15,6 +16,8 @@ class DictItem:
         self.fut = fut
         self.opened_by_me = opened_by_me
         self.using = 0
+        self.unique_id = None
+        self.in_use = True
         pass
     
     
@@ -54,8 +57,6 @@ class StreamProtocol(AbstractProtocol):
         self.always_connect = always_connect
         self.await_connections = dict()
         
-        
-        # self.lock = asyncio.Lock()
     async def stop(self):
         for k,v in self.connections.items():
             async with self.locks[k]:
@@ -92,9 +93,10 @@ class StreamProtocol(AbstractProtocol):
             self.locks[node_id] = asyncio.Lock()
         # print("connection from",node_id)
         if self.connections.get(node_id) != None:
+            
             with open(f"log{self.peer.pub_key}.txt", "a") as log:
                 log.write(f"duplicate connection from {addr} {node_id}\n")
-            #rint(self.connections.get(node_id).opened_by_me,ternary_comparison(self.peer.id_node, node_id))
+            
             if self.connections.get(node_id).opened_by_me * ternary_comparison(self.peer.id_node, node_id) == -1:
                 with open(f"log{self.peer.pub_key}.txt", "a") as log:
                     log.write(f"closing previous with {addr} {node_id}\n")
@@ -107,7 +109,8 @@ class StreamProtocol(AbstractProtocol):
         with open(f"log{self.peer.pub_key}.txt", "a") as log:
             log.write(f"listening from {addr} {node_id}\n")
         self.connections[node_id] = DictItem(reader,writer,None, -1)
-        self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,addr))
+        self.connections[node_id].unique_id = urandom(4)
+        self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,addr,self.connections[node_id].unique_id))
         return
     
     @bindto("get_peer")
@@ -136,10 +139,11 @@ class StreamProtocol(AbstractProtocol):
         if remote_port == None:
             
             return False
+        
         if self.connections.get(node_id) == None and self.await_connections.get(node_id) != None:
             
-            await self.await_connections[node_id]
-            
+            return await self.await_connections[node_id]
+        
         
         if self.connections.get(node_id) != None:
             print("duplicate connection OPENED")
@@ -152,7 +156,7 @@ class StreamProtocol(AbstractProtocol):
         
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         
-        if socket.SO_REUSEPORT != None:
+        if hasattr(socket, 'SO_REUSEPORT'):
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1) 
         else:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
@@ -185,7 +189,8 @@ class StreamProtocol(AbstractProtocol):
             
             return False
         self.connections[node_id] = DictItem(reader,writer,None,1)
-        self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,(remote_ip,remote_port)))
+        self.connections[node_id].unique_id = urandom(4)
+        self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,(remote_ip,remote_port),self.connections[node_id].unique_id ))
         #print("introducing myself :)")
         async with self.locks[node_id]:
             writer.write(b'\xe4\xe5\xf3\xc6')
@@ -219,8 +224,10 @@ class StreamProtocol(AbstractProtocol):
             self.remove_from_dict(node_id)
             
             return True
-    async def listen_for_data(self, reader: asyncio.StreamReader, node_id = None, addr = None):
+    async def listen_for_data(self, reader: asyncio.StreamReader, node_id = None, addr = None, uniq_id = None):
         
+        if self.connections.get(node_id) == None or self.connections[node_id].unique_id != uniq_id:
+            return
         # seqrand = random.randint(1,40000)
         #print("listening for data")
         with open(f"log{self.peer.pub_key}.txt", "a") as log:
@@ -228,13 +235,15 @@ class StreamProtocol(AbstractProtocol):
             
         try:
             data = await reader.readexactly(32)
-        except (ConnectionResetError, BrokenPipeError) as e:
+        except (ConnectionResetError, BrokenPipeError,IncompleteReadError) as e:
             with open(f"log{self.peer.pub_key}.txt", "a") as log:
                 log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
                 log.write(f" closed because reset from {node_id}\n")
-                log.write(e)
+                # log.write(e)
                 log.write("\n")
             async with self.locks[node_id]:
+                if self.connections[node_id].unique_id != uniq_id:
+                    return
                 if node_id !=None and self.connections.get(node_id) != None:
                     self.connections[node_id].fut = None
                 print("closing because reset", addr,node_id)
@@ -245,6 +254,8 @@ class StreamProtocol(AbstractProtocol):
         
         if data == b'':
             async with self.locks[node_id]:
+                if self.connections[node_id].unique_id != uniq_id:
+                    return
                 if node_id !=None and self.connections.get(node_id) != None:
                     self.connections[node_id].fut = None
                 print("closing because received empty bytes", addr,node_id)
@@ -261,6 +272,8 @@ class StreamProtocol(AbstractProtocol):
             data = await reader.read(min(i, 9048))
             if data == b'':
                 async with self.locks[node_id]:
+                    if self.connections[node_id].unique_id != uniq_id:
+                        return
                     if node_id !=None and self.connections.get(node_id) != None:
                         self.connections[node_id].fut = None
                     print("closing because received empty bytes", addr,node_id)
@@ -275,8 +288,7 @@ class StreamProtocol(AbstractProtocol):
         # print(seqrand,"read",len(buffer), "from",self.get_peer(node_id).pub_key)
         loop = asyncio.get_event_loop()
         asyncio.run_coroutine_threadsafe(self._caller(buffer,node_id,addr), loop)
-        
-        self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,addr))
+        self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,addr,uniq_id))
     async def send_stream(self, node_id, data, lvl = 0):
         
         if self.connections.get(node_id) == None or lvl >= 3: 

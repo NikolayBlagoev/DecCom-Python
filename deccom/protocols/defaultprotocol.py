@@ -33,12 +33,12 @@ class DefaultProtocol(asyncio.DatagramProtocol):
         self.callback = callback
 
     async def send_datagram(self, msg: bytes, addr: tuple[str,int]):
-
         await self.sendto(self.uniqueid + msg, addr)
         
 
     
     def process_datagram(self, addr, data):
+        
         loop = asyncio.get_event_loop()
         
         if len(data) < 2:
@@ -128,5 +128,7 @@ class DefaultProtocol(asyncio.DatagramProtocol):
     
     async def sendto(self,msg,addr):
         # print("sending to",addr,msg)
+        if addr[0] == self.transport.get_extra_info("sockname")[0] and addr[1] == self.transport.get_extra_info("sockname")[1]:
+            return
         self.transport.sendto(msg, addr)
         # print("sent")

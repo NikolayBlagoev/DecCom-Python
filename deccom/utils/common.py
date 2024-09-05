@@ -1,7 +1,17 @@
 from socket import socket
 from concurrent.futures import ThreadPoolExecutor
+
+"""
+Find an open port
+
+Return
+--------
+int
+    Avaialble open port
+"""
+
 def find_open_port():
-    ret = 10010
+    ret = None
     with socket() as s:
         s.bind(('',0))
 
@@ -9,7 +19,7 @@ def find_open_port():
         s.close()
     return ret
 
-def ternary_comparison(b1,b2):
+def ternary_comparison(b1: bytes,b2: bytes):
     if b1 > b2:
         return 1
     if b1 < b2:

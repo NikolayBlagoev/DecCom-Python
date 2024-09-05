@@ -19,7 +19,7 @@ class StreamNode(Node):
         self.peer_reads = dict()
         self.peer_writes = dict()
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        if socket.SO_REUSEPORT != None:
+        if hasattr(socket, 'SO_REUSEPORT'):
             self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1) 
         else:
             self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  

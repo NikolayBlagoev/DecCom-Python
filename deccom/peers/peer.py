@@ -7,7 +7,13 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from deccom.utils.common import byte_reader, byte_writer
 
 class Peer(object):
-    def __init__(self, addr, pub_key: Ed25519PrivateKey  = None, tcp = None, id_node = None, proof_of_self = None) -> None:
+
+    """
+    Peer object to store all information about a peer in the system (their identity, ip, port, etc...)
+    """
+
+
+    def __init__(self, addr, pub_key: Ed25519PrivateKey | str  = None, tcp = None, id_node = None, proof_of_self = None) -> None:
         self.priv_key = None
         if pub_key == None:
             self.key = gen_key()
@@ -23,29 +29,33 @@ class Peer(object):
         self.addr = addr
         self.tcp = tcp
         self.external_addr = addr
-        self.s = None
         # self.heard_from = None
         # if proof_of_self != None:
         #     proof_of_self = SHA256([pub_key,addr[0],addr[1],])
         # print("pub_key",pub_key)
-        pass
 
-    # |------------------------|
-    # | Control header (1B)    |
-    # |------------------------|
-    # | pub_key (MAX 63B)      |
-    # |------------------------|
-    # | addr[0] (4B)           |
-    # |------------------------|
-    # | addr[1] (2B)           |
-    # |------------------------|
-    # | tcp (2B)               |
-    # |------------------------|
-    # Control header contains (LSB FIRST):
-    # 6 Bits size of pub_key
-    # 1 Bits type of pub_key
-    # 1 Bit if TCP is present
+    
 
+    """
+    Generates a byte representation of the peer: 
+    |------------------------|
+    | Control header (1B)    |
+    |------------------------|
+    | pub_key (MAX 63B)      |
+    |------------------------|
+    | addr[0] (4B)           |
+    |------------------------|
+    | addr[1] (2B)           |
+    |------------------------|
+    | tcp (2B)               |
+    |------------------------|
+    Control header contains (LSB FIRST):
+    6 Bits size of pub_key
+    1 Bits type of pub_key
+    1 Bit if TCP is present
+    
+    Hence a header of 10100000 means TCP is present, Public key is an Ed25519 identity, public key length of 32 bytes (256 bits)
+    """
 
     def __bytes__(self)->bytes:
         writer = byte_writer()
@@ -70,6 +80,20 @@ class Peer(object):
         if self.tcp != None:
             writer.write_int(2, self.tcp)
         return writer.bytes()
+
+
+    """
+    Given a byte representation generates a peer
+    
+    Return
+    ----------
+
+    Peer
+        Peer object
+    
+    int
+        The offset of the pointer on the byte list once the peer has been read
+    """
 
     @staticmethod
     def from_bytes(b: bytes) -> tuple["Peer", int]:

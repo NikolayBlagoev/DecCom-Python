@@ -10,6 +10,11 @@ class NodeaAbstraction:
 
 
 class Finder(object):
+    """
+    Finder class for the Kademlia Protocol. Given a list of initial peer and an alpha parameter of number of peers to contact in parallel, find a given 
+    peer.
+    """
+
     def __init__(self, look_for: bytes, initial: list[Peer], alpha: int = 5) -> None:
         self.look_for = look_for
         self.look_for_int = int.from_bytes(look_for, byteorder="big")
@@ -21,7 +26,17 @@ class Finder(object):
             heapq.heappush(self.peers, (pi.idint ^ self.look_for_int, pi))
             self.contacted.add(pi.idx)
         
-        pass
+
+    """
+    Gives the next list of peers that should be contacted during the search of the peer
+
+
+    Returns
+    ----------
+    ret
+        A list of peers (of maximum size alpha) which are currently the closest known to the searched for peer.
+
+    """
 
     def find_peer(self):
         if len(self.peers) == 0:
@@ -33,6 +48,16 @@ class Finder(object):
             ret.append(heapq.heappop(self.peers)[1].p)
         return ret
     
+
+    """
+    Adds the list of peers to the internal heap queue
+
+    Parameters
+    ----------
+    peers 
+        List of peers to add
+    """
+
     def add_peer(self, peers: list[Peer]):
         for p in peers:
             prv = len(self.contacted)

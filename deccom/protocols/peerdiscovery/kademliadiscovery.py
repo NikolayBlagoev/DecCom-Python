@@ -329,7 +329,8 @@ class KademliaDiscovery(AbstractPeerDiscovery):
 
 
     async def find_peer(self, id) -> Peer:
-        # print(self.peer.pub_key, "looking for")
+        if id == self.peer.id_node:
+            return self.peer
         if self.get_peer(id) == None:
             
             if self.peer_crawls.get(id) == None:

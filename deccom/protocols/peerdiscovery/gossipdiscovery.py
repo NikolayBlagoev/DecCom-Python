@@ -211,6 +211,8 @@ class GossipDiscovery(AbstractPeerDiscovery):
         return
 
     async def find_peer(self, id) -> Peer:
+        if id == self.peer.id_node:
+            return self.peer
         if self.peers.get(id) == None:
             if self.peer_crawls.get(id) == None:
                 loop = asyncio.get_running_loop()
