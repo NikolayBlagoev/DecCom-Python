@@ -5,6 +5,25 @@ DecCom provides an easy interface to stack modular protocols on top of each othe
 
 THE PROJECT IS STILL A WORK IN PROGRESS!! ALL BINDINGS ARE SUBJECT TO CHANGE! USE AT YOUR OWN RISK!
 
+## Install
+
+You can download with **pip**
+
+```shell
+pip install deccom
+end
+```
+
+or build from source:
+
+```shell
+git clone git@github.com:NikolayBlagoev/DecCom-Python.git
+cd DecCom-Python
+pip install .
+end
+```
+
+
 ## Why DecCom?
 
 Many popular frameworks for distributed applications are often overly complex, poorly maintained, or straight up not working. [IPv8](https://github.com/Tribler/py-ipv8) has an incredibly rigid structure and poor throughput. [LibP2P](https://libp2p.io/) has a tidiously slow developmental cycle and for many languages the repositories are no longer maintained. It is incredibly difficult to build your desired application on any of these.
