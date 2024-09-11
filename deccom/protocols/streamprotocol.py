@@ -18,6 +18,7 @@ class DictItem:
         self.using = 0
         self.unique_id = None
         self.in_use = True
+        self.confirmed = False
         pass
     
     
@@ -106,10 +107,13 @@ class StreamProtocol(AbstractProtocol):
                     log.write(f"keeping old one with {addr} {node_id}\n")
                 writer.close()
                 return
+        writer.write(int(0).to_bytes(32,byteorder="big"))
+        await writer.drain()
         with open(f"log{self.peer.pub_key}.txt", "a") as log:
             log.write(f"listening from {addr} {node_id}\n")
         self.connections[node_id] = DictItem(reader,writer,None, -1)
         self.connections[node_id].unique_id = urandom(4)
+        self.connections[node_id].confirmed = True
         self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,addr,self.connections[node_id].unique_id))
         return
     
@@ -200,7 +204,9 @@ class StreamProtocol(AbstractProtocol):
                 log.write(f"introducing with {len(self.peer.id_node)} \n ")
             
             await writer.drain()
-        self.await_connections[node_id].set_result(True)
+            await self.await_connections[node_id]
+        
+        
         #del self.await_connections[node_id]
         self.connections.get(node_id).using += 1
         return True
@@ -264,30 +270,35 @@ class StreamProtocol(AbstractProtocol):
                 return
         buffer = bytearray()
         i = int.from_bytes(data,byteorder="big")
-        with open(f"log{self.peer.pub_key}.txt", "a") as log:
-            log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
-            log.write(f" will from {self.get_peer(node_id).pub_key} {i} {len(data)}\n")
-        
-        while i > 0:
-            data = await reader.read(min(i, 9048))
-            if data == b'':
-                async with self.locks[node_id]:
-                    if self.connections[node_id].unique_id != uniq_id:
+        if i != 0:
+            with open(f"log{self.peer.pub_key}.txt", "a") as log:
+                log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
+                log.write(f" will from {self.get_peer(node_id).pub_key} {i} {len(data)}\n")
+            
+            while i > 0:
+                data = await reader.read(min(i, 9048))
+                if data == b'':
+                    async with self.locks[node_id]:
+                        if self.connections[node_id].unique_id != uniq_id:
+                            return
+                        if node_id !=None and self.connections.get(node_id) != None:
+                            self.connections[node_id].fut = None
+                        print("closing because received empty bytes", addr,node_id)
+                        self.remove_from_dict(node_id)
+                        self.closed_stream(node_id, addr)
                         return
-                    if node_id !=None and self.connections.get(node_id) != None:
-                        self.connections[node_id].fut = None
-                    print("closing because received empty bytes", addr,node_id)
-                    self.remove_from_dict(node_id)
-                    self.closed_stream(node_id, addr)
-                    return
-            i -= len(data)
-            buffer+=data
-        with open(f"log{self.peer.pub_key}.txt", "a") as log:
-            log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
-            log.write(f" receive from {self.get_peer(node_id).pub_key} {len(buffer)}\n")
-        # print(seqrand,"read",len(buffer), "from",self.get_peer(node_id).pub_key)
+                i -= len(data)
+                buffer+=data
+            with open(f"log{self.peer.pub_key}.txt", "a") as log:
+                log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
+                log.write(f" receive from {self.get_peer(node_id).pub_key} {len(buffer)}\n")
+            # print(seqrand,"read",len(buffer), "from",self.get_peer(node_id).pub_key)
+            loop = asyncio.get_event_loop()
+            asyncio.run_coroutine_threadsafe(self._caller(buffer,node_id,addr), loop)
+        else:
+            self.connections[node_id].confirmed = True
+            self.await_connections[node_id].set_result(True)
         loop = asyncio.get_event_loop()
-        asyncio.run_coroutine_threadsafe(self._caller(buffer,node_id,addr), loop)
         self.connections[node_id].fut = asyncio.ensure_future(self.listen_for_data(reader,node_id,addr,uniq_id))
     async def send_stream(self, node_id, data, lvl = 0):
         
@@ -337,6 +348,8 @@ class StreamProtocol(AbstractProtocol):
         if self.connections.get(nodeid) == None:
             return
         # print("removing...")
+        if not self.connections[nodeid].confirmed:
+            self.await_connections[nodeid].set_result(False)
         if self.connections[nodeid].fut != None:
             # print("cancelling task...")
             self.connections[nodeid].fut.cancel()
