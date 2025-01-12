@@ -150,7 +150,7 @@ class StreamProtocol(AbstractProtocol):
         
         
         if self.connections.get(node_id) != None:
-            print("duplicate connection OPENED")
+            # print("duplicate connection OPENED")
             self.connections.get(node_id).using += 1
             return True
         loop = asyncio.get_event_loop()
@@ -236,8 +236,8 @@ class StreamProtocol(AbstractProtocol):
             return
         # seqrand = random.randint(1,40000)
         #print("listening for data")
-        with open(f"log{self.peer.pub_key}.txt", "a") as log:
-            log.write(f"listening for data {node_id} \n")
+        # with open(f"log{self.peer.pub_key}.txt", "a") as log:
+        #     log.write(f"listening for data {node_id} \n")
             
         try:
             data = await reader.readexactly(32)
@@ -271,9 +271,9 @@ class StreamProtocol(AbstractProtocol):
         buffer = bytearray()
         i = int.from_bytes(data,byteorder="big")
         if i != 0:
-            with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
-                log.write(f" will from {self.get_peer(node_id).pub_key} {i} {len(data)}\n")
+            # with open(f"log{self.peer.pub_key}.txt", "a") as log:
+            #     log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
+            #     log.write(f" will from {self.get_peer(node_id).pub_key} {i} {len(data)}\n")
             
             while i > 0:
                 data = await reader.read(min(i, 9048))
@@ -283,15 +283,15 @@ class StreamProtocol(AbstractProtocol):
                             return
                         if node_id !=None and self.connections.get(node_id) != None:
                             self.connections[node_id].fut = None
-                        print("closing because received empty bytes", addr,node_id)
+                        # print("closing because received empty bytes", addr,node_id)
                         self.remove_from_dict(node_id)
                         self.closed_stream(node_id, addr)
                         return
                 i -= len(data)
                 buffer+=data
-            with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
-                log.write(f" receive from {self.get_peer(node_id).pub_key} {len(buffer)}\n")
+            # with open(f"log{self.peer.pub_key}.txt", "a") as log:
+            #     log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
+            #     log.write(f" receive from {self.get_peer(node_id).pub_key} {len(buffer)}\n")
             # print(seqrand,"read",len(buffer), "from",self.get_peer(node_id).pub_key)
             loop = asyncio.get_event_loop()
             asyncio.run_coroutine_threadsafe(self._caller(buffer,node_id,addr), loop)
@@ -307,18 +307,18 @@ class StreamProtocol(AbstractProtocol):
             return False
         try:
             async with self.locks[node_id]:
-                with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                    log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
-                    log.write(f" sending to {self.get_peer(node_id).pub_key} {len(data)}\n")
+                # with open(f"log{self.peer.pub_key}.txt", "a") as log:
+                #     log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
+                #     log.write(f" sending to {self.get_peer(node_id).pub_key} {len(data)}\n")
 
                 self.connections[node_id].writer.write(len(data).to_bytes(32,byteorder="big"))
                 await self.connections[node_id].writer.drain()
                 self.connections[node_id].writer.write(data)
                 await self.connections[node_id].writer.drain()
         except ConnectionResetError:
-            with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
-                log.write(f" cannot send to {self.get_peer(node_id).pub_key} {len(data)}\n")
+            # with open(f"log{self.peer.pub_key}.txt", "a") as log:
+            #     log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
+            #     log.write(f" cannot send to {self.get_peer(node_id).pub_key} {len(data)}\n")
             await asyncio.sleep(3)
             p: Peer = self.get_peer(node_id)
             if p == None:
@@ -327,15 +327,15 @@ class StreamProtocol(AbstractProtocol):
             if ret == False:
                 return False
             return await self.send_stream(node_id,data, lvl=lvl+1)
-        with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
-                log.write(f" finished sending to {self.get_peer(node_id).pub_key} {len(data)}\n")
+        # with open(f"log{self.peer.pub_key}.txt", "a") as log:
+        #         log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
+        #         log.write(f" finished sending to {self.get_peer(node_id).pub_key} {len(data)}\n")
         # print("done srream")
         return True
     def set_stream_close_callback(self, callback):
         self.stream_close_callback = callback    
     async def _caller(self,data,node_id,addr):
-        print("received data... ", len(data))
+        # print("received data... ", len(data))
         try:
             self.stream_callback(data,node_id,addr)
         except Exception:
