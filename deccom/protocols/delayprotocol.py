@@ -42,7 +42,7 @@ class DelayProtocol(AbstractProtocol):
             loop = asyncio.get_event_loop()
             dl = self.delay_map(p.pub_key, self.peer.pub_key)
             loop = asyncio.get_event_loop()
-            loop.call_later(dl[0]/1000 + sz/(1024**3*dl[1]),self.stream_callback,(data,node_id,addr))
+            loop.call_later(dl[0]/1000 + len(data)/(1024**3*dl[1]),self.stream_callback,(data,node_id,addr))
         else:
             self.stream_callback(data,node_id,addr)
     @bindto("get_peer")
