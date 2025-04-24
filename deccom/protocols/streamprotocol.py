@@ -207,7 +207,7 @@ class StreamProtocol(AbstractProtocol):
             
             await writer.drain()
             self.send_connections[node_id].confirmed = True
-            self.send_connections[node_id].set_result(True)
+            self.await_send_connections[node_id].set_result(True)
         
         
         #del self.await_connections[node_id]
