@@ -297,9 +297,9 @@ class StreamProtocol(AbstractProtocol):
                         return
                 i -= len(data)
                 buffer+=data
-            # with open(f"log{self.peer.pub_key}.txt", "a") as log:
-            #     log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
-            #     log.write(f" receive from {self.get_peer(node_id).pub_key} {len(buffer)}\n")
+            with open(f"log{self.peer.pub_key}.txt", "a") as log:
+                
+                log.write(f" Finished receiving from {self.get_peer(node_id).pub_key} {len(buffer)}\n")
             # print(seqrand,"read",len(buffer), "from",self.get_peer(node_id).pub_key)
             loop = asyncio.get_event_loop()
             asyncio.run_coroutine_threadsafe(self._caller(buffer,node_id,addr), loop)
