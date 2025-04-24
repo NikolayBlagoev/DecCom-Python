@@ -29,7 +29,7 @@ class DelayProtocol(AbstractProtocol):
             dl = dl[0]/1000 + sz/(1024**3*dl[1])
             with open(f"log{self.peer.pub_key}.txt", "a") as log:
                 
-                log.write(f" Will send to {self.get_peer(node_id).pub_key} {len(buffer)} in {dl} seconds\n")
+                log.write(f" Will send to {self.get_peer(node_id).pub_key} {len(data)} in {dl} seconds\n")
             if dl > 0.2:
                 await asyncio.sleep(dl)
             if self.started:
