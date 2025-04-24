@@ -169,7 +169,7 @@ class StreamProtocol(AbstractProtocol):
 
         
         with open(f"log{self.peer.pub_key}.txt", "a") as log:
-            log.write(f"opening connection to {self.get_peer(node_id)}\n")
+            log.write(f"opening connection to {self.get_peer(node_id).pub_key}\n")
         s.bind((self.peer.addr[0], self.peer.tcp if port_listen == None else port_listen))
         
         try:
@@ -210,7 +210,7 @@ class StreamProtocol(AbstractProtocol):
             self.send_connections[node_id].confirmed = True
             self.await_send_connections[node_id].set_result(True)
         with open(f"log{self.peer.pub_key}.txt", "a") as log:
-            log.write(f"connection open to {self.get_peer(node_id)}\n")
+            log.write(f"connection open to {self.get_peer(node_id).pub_key}\n")
         
         #del self.await_connections[node_id]
         self.send_connections.get(node_id).using += 1
@@ -359,7 +359,10 @@ class StreamProtocol(AbstractProtocol):
             return
         if dc == self.send_connections:
             with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                log.write(f"Closing connection to to {self.get_peer(nodeid)}\n")
+                log.write(f"Closing outgoing connection to to {self.get_peer(nodeid).pub_key}\n")
+        else:
+            with open(f"log{self.peer.pub_key}.txt", "a") as log:
+                log.write(f"Closing incoming connection to to {self.get_peer(nodeid).pub_key}\n")
         # print("removing...")
         if not dc[nodeid].confirmed:
             if self.send_connections == dc:
