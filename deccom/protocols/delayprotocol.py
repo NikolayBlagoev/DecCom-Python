@@ -26,7 +26,9 @@ class DelayProtocol(AbstractProtocol):
             sz = len(data) - ignore_sz
             # print(dl)
             # print("will send in ",dl[0]/1000 + sz/(1024**3*dl[1]))
-            await asyncio.sleep(dl[0]/1000 + sz/(1024**3*dl[1]))
+            dl = dl[0]/1000 + sz/(1024**3*dl[1])
+            if dl > 0.2:
+                await asyncio.sleep(dl)
             if self.started:
                 return await self._lower_send_to(node_id,data)
         else:
