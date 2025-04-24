@@ -168,7 +168,8 @@ class StreamProtocol(AbstractProtocol):
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
 
         
-        
+        with open(f"log{self.peer.pub_key}.txt", "a") as log:
+            log.write(f"opening connection to {self.get_peer(node_id)}\n")
         s.bind((self.peer.addr[0], self.peer.tcp if port_listen == None else port_listen))
         
         try:
@@ -208,7 +209,8 @@ class StreamProtocol(AbstractProtocol):
             await writer.drain()
             self.send_connections[node_id].confirmed = True
             self.await_send_connections[node_id].set_result(True)
-        
+        with open(f"log{self.peer.pub_key}.txt", "a") as log:
+            log.write(f"connection open to {self.get_peer(node_id)}\n")
         
         #del self.await_connections[node_id]
         self.send_connections.get(node_id).using += 1
@@ -355,6 +357,9 @@ class StreamProtocol(AbstractProtocol):
     def remove_from_dict(self,nodeid,dc):
         if dc.get(nodeid) == None:
             return
+        if dc == self.send_connections:
+            with open(f"log{self.peer.pub_key}.txt", "a") as log:
+                log.write(f"Closing connection to to {self.get_peer(nodeid)}\n")
         # print("removing...")
         if not dc[nodeid].confirmed:
             if self.send_connections == dc:
