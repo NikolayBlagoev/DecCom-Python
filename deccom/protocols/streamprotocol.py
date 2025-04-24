@@ -244,7 +244,7 @@ class StreamProtocol(AbstractProtocol):
         except (ConnectionResetError, BrokenPipeError,IncompleteReadError) as e:
             with open(f"log{self.peer.pub_key}.txt", "a") as log:
                 log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
-                log.write(f" closed because reset from {node_id}\n")
+                log.write(f" closed because reset from {self.get_peer(node_id).pub_key}\n")
                 # log.write(e)
                 log.write("\n")
             async with self.locks[node_id]:
@@ -264,7 +264,7 @@ class StreamProtocol(AbstractProtocol):
                     return
                 if node_id !=None and self.connections.get(node_id) != None:
                     self.connections[node_id].fut = None
-                print("closing because received empty bytes", addr,node_id)
+                
                 self.remove_from_dict(node_id)
                 self.closed_stream(node_id, addr)
                 return
@@ -272,7 +272,7 @@ class StreamProtocol(AbstractProtocol):
         i = int.from_bytes(data,byteorder="big")
         if i != 0:
             with open(f"log{self.peer.pub_key}.txt", "a") as log:
-                # log.write(datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
+                
                 log.write(f" will from {self.get_peer(node_id).pub_key} {i} {len(data)}\n")
             
             while i > 0:
@@ -283,6 +283,9 @@ class StreamProtocol(AbstractProtocol):
                             return
                         if node_id !=None and self.connections.get(node_id) != None:
                             self.connections[node_id].fut = None
+                        with open(f"log{self.peer.pub_key}.txt", "a") as log:
+                            
+                            log.write(f" closed because empty bytes from {self.get_peer(node_id).pub_key} {len(buffer)}\n")
                         # print("closing because received empty bytes", addr,node_id)
                         self.remove_from_dict(node_id)
                         self.closed_stream(node_id, addr)
