@@ -67,10 +67,16 @@ class StreamProtocol(AbstractProtocol):
                 if v.fut != None:
                     v.fut.cancel()
         for k,v in self.send_connections.items():
-            async with self.send_connections[k]:
+            if self.send_locks.get(k) != None:
+                async with self.send_locks[k]:
+                    v.writer.close()
+                    if v.fut != None:
+                        v.fut.cancel()
+            else:
                 v.writer.close()
                 if v.fut != None:
                     v.fut.cancel()
+
         self.receive_connections.clear()
         self.send_connections.clear()
         self.receive_locks.clear()
